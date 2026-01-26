@@ -7,7 +7,7 @@ import { PermitFormData } from "../types";
  * 1. Uso de process.env.API_KEY exclusivamente.
  * 2. Estructura de parámetros nombrados.
  */
-const apiKey = process.env.API_KEY || "";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 /**
