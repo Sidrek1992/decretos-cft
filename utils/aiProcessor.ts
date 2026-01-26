@@ -8,6 +8,7 @@ import { PermitFormData } from "../types";
  * 2. Estructura de parámetros nombrados.
  */
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+console.log("🔑 Gemini API Key configurada:", apiKey ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : "NO CONFIGURADA");
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 /**
@@ -15,13 +16,16 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
  * y extraer los datos estructurados necesarios para generar el decreto.
  */
 export const extractDataFromPdf = async (base64Pdf: string): Promise<Partial<PermitFormData>> => {
+  console.log("📄 Iniciando procesamiento de PDF con IA...");
+  console.log("📏 Tamaño del PDF (base64):", base64Pdf.length, "caracteres");
+
   if (!ai) {
-    console.error("Gemini API Key no configurada.");
+    console.error("❌ Gemini API Key no configurada. Variable VITE_GEMINI_API_KEY está vacía.");
     return {};
   }
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: [{
         parts: [
           {
