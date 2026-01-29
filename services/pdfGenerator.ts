@@ -18,7 +18,7 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
     pdfWindow.document.write(`
       <html>
         <head>
-          <title>SGP Cloud - Procesando</title>
+          <title>GDP Cloud - Procesando</title>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
           <style>
             body { 
@@ -61,7 +61,7 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
         <body>
           <div class="card">
             <div class="loader"></div>
-            <h2>SGP ENGINE v${CONFIG.APP_VERSION}</h2>
+            <h2>GDP ENGINE v${CONFIG.APP_VERSION}</h2>
             <p>Generando documento en Drive...</p>
             <div class="filename">${finalFileName}</div>
             <div class="badge">CONEXIÓN SEGURA</div>
@@ -73,25 +73,51 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
 
   // Las llaves con guiones bajos serán buscadas con espacios por el script GAS
   // Ej: Cantidad_de_días -> «Cantidad de días»
-  const payload = {
+  const basePayload = {
     "fileName": finalFileName,
     "Decreto": actoOficial,
-    "FUNCIONARIO": nombreMayuscula, // Etiqueta «FUNCIONARIO» en MAYÚSCULAS
-    "Funcionario": nombreProperCase, // Etiqueta «Funcionario» en Mayúsculas Iniciales
+    "FUNCIONARIO": nombreMayuscula,
+    "Funcionario": nombreProperCase,
     "solicitudType": typeCode,
     "RUT": record.rut.trim(),
     "Fecha": formatSimpleDate(record.fechaDecreto),
     "Cantidad_de_días": record.cantidadDias.toString().replace('.', ','),
     "Fecha_de_inicio": formatLongDate(record.fechaInicio),
-    "Tipo_de_Jornada": record.tipoJornada.replace(/[()]/g, '').trim(),
-    "Días_a_su_haber": record.diasHaber.toFixed(1).replace('.', ','),
-    "Saldo_final": (record.diasHaber - record.cantidadDias).toFixed(1).replace('.', ','),
     "RA": record.ra,
     "Emite": record.emite
   };
 
+  // Determinar si FL usa 1 o 2 períodos
+  const hasTwoPeriods = typeCode === 'FL' && record.periodo2 && (record.solicitadoP2 || 0) > 0;
+
+  // Campos específicos según tipo
+  const payload = typeCode === 'FL' ? {
+    ...basePayload,
+    "templateId": hasTwoPeriods ? CONFIG.TEMPLATE_FL_2P_DOC_ID : CONFIG.TEMPLATE_FL_1P_DOC_ID,
+    "Fecha_de_Término": formatLongDate(record.fechaTermino || ''),
+    "Período_1": record.periodo1 || '',
+    "Saldo_Disponible_Periodo_1": (record.saldoDisponibleP1 || 0).toString().replace('.', ','),
+    "Solicitados_Periodo_1": (record.solicitadoP1 || 0).toString().replace('.', ','),
+    "Saldo_Final_Periodo_1": ((record.saldoDisponibleP1 || 0) - (record.solicitadoP1 || 0)).toString().replace('.', ','),
+    ...(hasTwoPeriods ? {
+      "Período_2": record.periodo2 || '',
+      "Saldo_Disponible_Periodo_2": (record.saldoDisponibleP2 || 0).toString().replace('.', ','),
+      "Solicitados_Periodo_2": (record.solicitadoP2 || 0).toString().replace('.', ','),
+      "Saldo_Final_Periodo_2": ((record.saldoDisponibleP2 || 0) - (record.solicitadoP2 || 0)).toString().replace('.', ','),
+    } : {}),
+  } : {
+    ...basePayload,
+    "Tipo_de_Jornada": record.tipoJornada.replace(/[()]/g, '').trim(),
+    "Días_a_su_haber": record.diasHaber.toFixed(1).replace('.', ','),
+    "Saldo_final": (record.diasHaber - record.cantidadDias).toFixed(1).replace('.', ','),
+  };
+
   try {
-    const response = await fetch(CONFIG.WEB_APP_URL, {
+    // Usar el endpoint correcto según tipo de solicitud y períodos
+    const scriptUrl = typeCode === 'FL'
+      ? (hasTwoPeriods ? CONFIG.WEB_APP_URL_FL_2P : CONFIG.WEB_APP_URL_FL)
+      : CONFIG.WEB_APP_URL;
+    const response = await fetch(scriptUrl, {
       method: 'POST',
       mode: 'cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -104,27 +130,73 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
 
     if (result.success && result.url && pdfWindow) {
       const docUrl = result.url;
-      const pdfUrl = docUrl.replace(/\/edit.*$/, '/export?format=pdf');
+      const pdfBase64 = result.pdfBase64;
+      const safeName = finalFileName.replace(/\//g, '_');
+
+      if (pdfBase64) {
+        // Descargar PDF directamente desde base64 devuelto por GAS
+        const byteCharacters = atob(pdfBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Trigger descarga automática
+        const a = pdfWindow.document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${safeName}.pdf`;
+        pdfWindow.document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      }
 
       // Mostrar opciones de descarga
+      const pdfDownloadFn = pdfBase64 ? `
+        <script>
+          function downloadPdf() {
+            var b64 = "${pdfBase64}";
+            var byteChars = atob(b64);
+            var byteNums = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+            var blob = new Blob([new Uint8Array(byteNums)], {type: 'application/pdf'});
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = "${safeName}.pdf";
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+        </script>
+      ` : '';
+
       pdfWindow.document.body.innerHTML = `
+        ${pdfDownloadFn}
         <div style="text-align:center; padding: 50px; font-family: 'Inter', sans-serif; background: #0f172a; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0;">
           <div style="background: #1e293b; padding: 3rem; border-radius: 2rem; border: 1px solid #10b98155; max-width: 500px; width: 90%;">
             <div style="width: 60px; height: 60px; background: #10b98130; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
               <svg width="32" height="32" fill="none" stroke="#10b981" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </div>
             <h3 style="color: white; margin-bottom: 10px; font-size: 1.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;">¡Documento Generado!</h3>
-            <p style="color: #94a3b8; font-size: 12px; margin-bottom: 1.5rem;">${finalFileName}</p>
+            <p style="color: #94a3b8; font-size: 12px; margin-bottom: 1.5rem;">${safeName}.pdf</p>
             
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <a href="${docUrl}" target="_blank" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 1rem 1.5rem; background: #3b82f6; color: white; text-decoration: none; border-radius: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px;">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
                 Abrir en Google Docs
               </a>
-              <a href="${pdfUrl}" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 1rem 1.5rem; background: #ef4444; color: white; text-decoration: none; border-radius: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px;">
+              ${pdfBase64 ? `
+              <button onclick="downloadPdf()" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 1rem 1.5rem; background: #ef4444; color: white; border: none; border-radius: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; cursor: pointer;">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
                 Descargar PDF
-              </a>
+              </button>` : `
+              <a href="${docUrl.replace(/\/edit.*$/, '/export?format=pdf')}" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 1rem 1.5rem; background: #ef4444; color: white; text-decoration: none; border-radius: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px;">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+                Descargar PDF
+              </a>`}
             </div>
             
             <p style="color: #64748b; font-size: 10px; margin-top: 1.5rem; text-transform: uppercase; letter-spacing: 0.1em;">El documento también fue guardado en tu Drive</p>

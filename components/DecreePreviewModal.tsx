@@ -19,18 +19,18 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
     return (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" onClick={onClose}>
             <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
-            <div className="relative w-full max-w-2xl max-h-[90vh] bg-white dark:bg-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="relative w-full max-w-2xl max-h-[90vh] bg-white dark:bg-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
-                <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white">
+                <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-4 sm:p-6 text-white">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
-                                <FileText className="w-6 h-6" />
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center">
+                                <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold">Previsualización del Decreto</h2>
-                                <p className="text-xs opacity-70">Revisa los datos antes de generar</p>
+                                <h2 className="text-base sm:text-lg font-bold">Previsualización del Decreto</h2>
+                                <p className="text-[10px] sm:text-xs opacity-70">Revisa los datos antes de generar</p>
                             </div>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
@@ -40,7 +40,7 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
                 </div>
 
                 {/* Preview Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                     {/* Document Header */}
                     <div className="text-center mb-8 pb-6 border-b-2 border-dashed border-slate-200 dark:border-slate-700">
                         <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">República de Chile</p>
@@ -131,18 +131,18 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
 
                     {/* Saldo Information */}
                     <div className="mt-6 p-4 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-700 dark:to-slate-700/50 rounded-2xl border border-slate-200 dark:border-slate-600">
-                        <div className="grid grid-cols-3 gap-4 text-center">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
                             <div>
                                 <p className="text-[10px] text-slate-400 uppercase tracking-wider">Días Haber</p>
-                                <p className="text-2xl font-black text-slate-600 dark:text-slate-300">{record.diasHaber}</p>
+                                <p className="text-xl sm:text-2xl font-black text-slate-600 dark:text-slate-300">{record.diasHaber}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] text-slate-400 uppercase tracking-wider">Solicitados</p>
-                                <p className="text-2xl font-black text-indigo-600">-{record.cantidadDias}</p>
+                                <p className="text-xl sm:text-2xl font-black text-indigo-600">-{record.cantidadDias}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] text-slate-400 uppercase tracking-wider">Saldo Final</p>
-                                <p className={`text-2xl font-black ${parseFloat(saldoFinal) < 0 ? 'text-red-500' :
+                                <p className={`text-xl sm:text-2xl font-black ${parseFloat(saldoFinal) < 0 ? 'text-red-500' :
                                         parseFloat(saldoFinal) < 2 ? 'text-amber-500' : 'text-emerald-500'
                                     }`}>
                                     {saldoFinal}
@@ -165,7 +165,7 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
                 </div>
 
                 {/* Footer Actions */}
-                <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex gap-3">
+                <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-3">
                     <button
                         onClick={onClose}
                         className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-sm hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"

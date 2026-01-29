@@ -25,8 +25,9 @@ function doGet(e) {
     // Verificar si hay datos (mínimo fila 2 para tener al menos un registro)
     if (lastRow < 2) return createJsonResponse({ success: true, data: [] });
 
-    // Determinar número de columnas según el tipo
-    var numCols = isEmployees ? 5 : 15;
+    // Leer todas las columnas con datos (sin limitar a un número fijo)
+    var lastCol = sheet.getLastColumn();
+    var numCols = isEmployees ? 5 : lastCol;
 
     // Leer desde fila 2 hasta la última fila
     var rows = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
@@ -72,7 +73,8 @@ function handleSpreadsheetSync(payload) {
 
     // Detectar tipo de sheet por el payload
     var isEmployees = payload.type === 'employees';
-    var numCols = isEmployees ? 5 : 15;
+    var lastCol = sheet.getLastColumn();
+    var numCols = isEmployees ? 5 : Math.max(lastCol, payload.data && payload.data[0] ? payload.data[0].length : lastCol);
 
     // Limpiar datos desde fila 2 (preservar encabezado en fila 1)
     if (lastRow >= 2) {
@@ -95,8 +97,9 @@ function handleSpreadsheetSync(payload) {
 
 function handleDocumentCreation(data) {
   try {
-    // Usamos el servicio estándar DriveApp para evitar configurar servicios avanzados
-    var templateFile = DriveApp.getFileById(TEMPLATE_DOC_ID);
+    // Usar plantilla específica si se envía en el payload, sino la por defecto
+    var templateId = data.templateId || TEMPLATE_DOC_ID;
+    var templateFile = DriveApp.getFileById(templateId);
     var destinationFolder = DriveApp.getFolderById(FOLDER_DESTINATION_ID);
     var fileName = data.fileName || "DECRETO_" + new Date().getTime();
 
@@ -107,7 +110,7 @@ function handleDocumentCreation(data) {
 
     // Reemplazar campos
     for (var key in data) {
-      if (key === "fileName") continue;
+      if (key === "fileName" || key === "templateId") continue;
       var val = (data[key] !== undefined && data[key] !== null) ? data[key].toString() : "";
 
       // Soporta formatos {{campo}} y «campo»
@@ -123,14 +126,20 @@ function handleDocumentCreation(data) {
 
     doc.saveAndClose();
 
+    // Exportar como PDF
+    var docId = copy.getId();
+    var pdfBlob = DriveApp.getFileById(docId).getAs('application/pdf');
+    var pdfBase64 = Utilities.base64Encode(pdfBlob.getBytes());
+
     // Configurar permisos de visualización
-    var file = DriveApp.getFileById(copy.getId());
+    var file = DriveApp.getFileById(docId);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
     return createJsonResponse({
       success: true,
       url: file.getUrl(),
-      id: copy.getId()
+      id: docId,
+      pdfBase64: pdfBase64
     });
   } catch (e) {
     return createJsonResponse({ success: false, error: "Fallo en motor Drive: " + e.toString() });
@@ -144,9 +153,19 @@ function createJsonResponse(obj) {
 /**
  * IMPORTANTE: Ejecuta esta función una vez en el editor de Apps Script 
  * para autorizar los permisos de Drive y DocumentApp.
+ * Incluye makeCopy para forzar el scope completo de Drive.
  */
 function AUTORIZAR_CON_UN_CLIC() {
-  DriveApp.getFileById(TEMPLATE_DOC_ID);
+  // Forzar autorización de lectura
+  var file = DriveApp.getFileById(TEMPLATE_DOC_ID);
+  var folder = DriveApp.getFolderById(FOLDER_DESTINATION_ID);
+  
+  // Forzar autorización de escritura/copia
+  var testCopy = file.makeCopy("_TEST_AUTORIZACION_BORRAR", folder);
+  DriveApp.getFileById(testCopy.getId()).setTrashed(true); // Eliminar copia de prueba
+  
+  // Forzar autorización de DocumentApp
   DocumentApp.openById(TEMPLATE_DOC_ID);
-  Logger.log("✅ Autorización optimizada completada con éxito");
+  
+  Logger.log("✅ Autorización completa (lectura, copia y documentos) exitosa");
 }

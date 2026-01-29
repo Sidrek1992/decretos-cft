@@ -8,6 +8,7 @@ import {
   Clock, Award, Edit3, Eye, XCircle
 } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import * as XLSX from 'xlsx';
 
 interface EmployeeListModalProps {
@@ -143,6 +144,13 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
       });
   }, [employees, search, sortField, sortOrder, balanceFilter, employeeStats]);
 
+  // Focus trap para accesibilidad
+  const { containerRef, handleKeyDown } = useFocusTrap({
+    isActive: isOpen,
+    onEscape: onClose,
+    initialFocus: '[data-autofocus]',
+  });
+
   // Return condicional DESPUÉS de todos los hooks
   if (!isOpen) return null;
 
@@ -191,7 +199,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
   const exportEmployeesToExcel = () => {
     const data = filteredEmployees.map(emp => {
-      const stats = employeeStats[emp.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6 };
+      const stats = employeeStats[emp.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, lastDecree: null };
       return {
         'Nombre': emp.nombre,
         'RUT': emp.rut,
@@ -213,12 +221,17 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     <div
       className="fixed inset-0 z-[150] flex items-center justify-center p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="employee-modal-title"
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
 
       {/* Modal */}
       <div
+        ref={containerRef}
+        onKeyDown={handleKeyDown}
         className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
@@ -234,7 +247,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
+                <h2 id="employee-modal-title" className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
                   Gestión de Personal
                 </h2>
                 <p className="text-[10px] sm:text-[11px] font-bold uppercase opacity-60 tracking-[0.15em] sm:tracking-[0.2em] mt-1">

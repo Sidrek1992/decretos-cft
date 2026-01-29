@@ -54,34 +54,34 @@ const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, reco
     return (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" onClick={onClose}>
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-            <div className="relative w-full max-w-3xl max-h-[85vh] bg-white dark:bg-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <FileText className="w-6 h-6" />
+            <div className="relative w-full max-w-3xl max-h-[85vh] bg-white dark:bg-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 sm:p-6 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
                         <div>
-                            <h2 className="text-lg font-bold">Libro de Decretos</h2>
-                            <p className="text-xs opacity-80">Resumen mensual</p>
+                            <h2 className="text-base sm:text-lg font-bold">Libro de Decretos</h2>
+                            <p className="text-[10px] sm:text-xs opacity-80">Resumen mensual</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-xl"><X /></button>
                 </div>
-                <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-3 items-center">
-                    <select value={selectedYear} onChange={e => setSelectedYear(+e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border rounded-xl text-sm font-bold">
+                <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-2 sm:gap-3 items-center">
+                    <select value={selectedYear} onChange={e => setSelectedYear(+e.target.value)} className="px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-50 dark:bg-slate-700 border rounded-xl text-xs sm:text-sm font-bold">
                         {years.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
-                    <select value={selectedMonth} onChange={e => setSelectedMonth(+e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border rounded-xl text-sm font-bold">
+                    <select value={selectedMonth} onChange={e => setSelectedMonth(+e.target.value)} className="px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-50 dark:bg-slate-700 border rounded-xl text-xs sm:text-sm font-bold">
                         {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                     </select>
                     <div className="flex gap-1 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
                         {(['ALL', 'PA', 'FL'] as const).map(t => (
-                            <button key={t} onClick={() => setSelectedType(t)} className={`px-3 py-1.5 rounded text-xs font-bold ${selectedType === t ? 'bg-white dark:bg-slate-600 text-indigo-600' : 'text-slate-500'}`}>
+                            <button key={t} onClick={() => setSelectedType(t)} className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs font-bold ${selectedType === t ? 'bg-white dark:bg-slate-600 text-indigo-600' : 'text-slate-500'}`}>
                                 {t === 'ALL' ? 'Todos' : t}
                             </button>
                         ))}
                     </div>
                     <div className="flex-1" />
-                    <button onClick={handlePrint} disabled={!filteredRecords.length} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                        <Printer size={16} /> Imprimir
+                    <button onClick={handlePrint} disabled={!filteredRecords.length} className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white rounded-xl text-xs sm:text-sm font-bold disabled:opacity-50">
+                        <Printer size={14} className="sm:hidden" /><Printer size={16} className="hidden sm:block" /> Imprimir
                     </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">

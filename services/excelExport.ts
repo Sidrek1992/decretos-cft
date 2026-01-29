@@ -11,8 +11,8 @@ export const exportToExcel = (data: PermitRecord[]) => {
   const rows = data.map((record, idx) => [
     idx + 1, // #
     record.solicitudType, // Decreto
-    record.materia, // Materia
-    record.acto, // Acto
+    record.acto, // Materia (correlativo)
+    'Decreto Exento', // Acto
     record.funcionario, // Funcionario
     record.rut, // RUT
     record.periodo, // Periodo
@@ -38,21 +38,21 @@ export const exportToExcel = (data: PermitRecord[]) => {
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:O1');
   for (let R = 4; R <= range.e.r; ++R) {
     // Columna H (index 7): Cantidad de días
-    const cellH = ws[XLSX.utils.encode_cell({r:R, c:7})];
+    const cellH = ws[XLSX.utils.encode_cell({ r: R, c: 7 })];
     if (cellH) cellH.t = 'n';
-    
+
     // Columna K (index 10): Días a su haber
-    const cellK = ws[XLSX.utils.encode_cell({r:R, c:10})];
+    const cellK = ws[XLSX.utils.encode_cell({ r: R, c: 10 })];
     if (cellK) cellK.t = 'n';
-    
+
     // Columna M (index 12): Saldo final
-    const cellM = ws[XLSX.utils.encode_cell({r:R, c:12})];
+    const cellM = ws[XLSX.utils.encode_cell({ r: R, c: 12 })];
     if (cellM) cellM.t = 'n';
   }
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Planilla Institucional");
-  
+
   const timestamp = new Date().toISOString().split('T')[0];
   XLSX.writeFile(wb, `Planilla_Decretos_PA_${timestamp}.xlsx`);
 };

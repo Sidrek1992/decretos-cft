@@ -16,7 +16,7 @@ interface ToastProps {
     onRemove: (id: string) => void;
 }
 
-const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
+const Toast: React.FC<ToastProps> = React.memo(({ toast, onRemove }) => {
     const [isExiting, setIsExiting] = useState(false);
 
     useEffect(() => {
@@ -75,12 +75,15 @@ const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
             <button
                 onClick={handleClose}
                 className="p-1 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+                aria-label="Cerrar notificación"
             >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
             </button>
         </div>
     );
-};
+});
+
+Toast.displayName = 'Toast';
 
 // Container de Toasts
 interface ToastContainerProps {
@@ -88,9 +91,14 @@ interface ToastContainerProps {
     onRemove: (id: string) => void;
 }
 
-export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemove }) => {
+export const ToastContainer: React.FC<ToastContainerProps> = React.memo(({ toasts, onRemove }) => {
     return (
-        <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        <div 
+            className="fixed bottom-6 right-6 z-[200] flex flex-col gap-3 max-w-sm w-full pointer-events-none"
+            role="region"
+            aria-label="Notificaciones"
+            aria-live="polite"
+        >
             {toasts.map(toast => (
                 <div key={toast.id} className="pointer-events-auto">
                     <Toast toast={toast} onRemove={onRemove} />
@@ -98,7 +106,9 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemove
             ))}
         </div>
     );
-};
+});
+
+ToastContainer.displayName = 'ToastContainer';
 
 // Hook para manejar toasts
 export const useToast = () => {

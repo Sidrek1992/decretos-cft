@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 interface PaginationProps {
@@ -9,19 +9,27 @@ interface PaginationProps {
     onPageChange: (page: number) => void;
 }
 
-const Pagination: React.FC<PaginationProps> = ({
+const Pagination: React.FC<PaginationProps> = React.memo(({
     currentPage,
     totalPages,
     totalItems,
     itemsPerPage,
     onPageChange
 }) => {
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 640);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     const startItem = (currentPage - 1) * itemsPerPage + 1;
     const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
-    const getPageNumbers = () => {
+    const pageNumbers = useMemo(() => {
         const pages: (number | string)[] = [];
-        const maxVisible = 5;
+        const maxVisible = isMobile ? 3 : 5;
 
         if (totalPages <= maxVisible) {
             for (let i = 1; i <= totalPages; i++) pages.push(i);
@@ -40,7 +48,12 @@ const Pagination: React.FC<PaginationProps> = ({
         }
 
         return pages;
-    };
+    }, [currentPage, totalPages, isMobile]);
+
+    const goToFirst = useCallback(() => onPageChange(1), [onPageChange]);
+    const goToPrev = useCallback(() => onPageChange(currentPage - 1), [onPageChange, currentPage]);
+    const goToNext = useCallback(() => onPageChange(currentPage + 1), [onPageChange, currentPage]);
+    const goToLast = useCallback(() => onPageChange(totalPages), [onPageChange, totalPages]);
 
     if (totalPages <= 1) return null;
 
@@ -56,32 +69,32 @@ const Pagination: React.FC<PaginationProps> = ({
             <div className="flex items-center gap-1">
                 {/* Primera página */}
                 <button
-                    onClick={() => onPageChange(1)}
+                    onClick={goToFirst}
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    title="Primera página"
+                    className="hidden sm:block p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    aria-label="Primera página"
                 >
-                    <ChevronsLeft size={16} />
+                    <ChevronsLeft size={16} aria-hidden="true" />
                 </button>
 
                 {/* Anterior */}
                 <button
-                    onClick={() => onPageChange(currentPage - 1)}
+                    onClick={goToPrev}
                     disabled={currentPage === 1}
                     className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    title="Página anterior"
+                    aria-label="Página anterior"
                 >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={16} aria-hidden="true" />
                 </button>
 
                 {/* Números de página */}
                 <div className="flex items-center gap-1 mx-2">
-                    {getPageNumbers().map((page, index) => (
+                    {pageNumbers.map((page, index) => (
                         typeof page === 'number' ? (
                             <button
                                 key={index}
                                 onClick={() => onPageChange(page)}
-                                className={`w-9 h-9 rounded-lg text-xs font-bold transition-all ${currentPage === page
+                                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-[10px] sm:text-xs font-bold transition-all ${currentPage === page
                                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/50'
                                         : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
                                     }`}
@@ -98,26 +111,28 @@ const Pagination: React.FC<PaginationProps> = ({
 
                 {/* Siguiente */}
                 <button
-                    onClick={() => onPageChange(currentPage + 1)}
+                    onClick={goToNext}
                     disabled={currentPage === totalPages}
                     className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    title="Página siguiente"
+                    aria-label="Página siguiente"
                 >
-                    <ChevronRight size={16} />
+                    <ChevronRight size={16} aria-hidden="true" />
                 </button>
 
                 {/* Última página */}
                 <button
-                    onClick={() => onPageChange(totalPages)}
+                    onClick={goToLast}
                     disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    title="Última página"
+                    className="hidden sm:block p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    aria-label="Última página"
                 >
-                    <ChevronsRight size={16} />
+                    <ChevronsRight size={16} aria-hidden="true" />
                 </button>
             </div>
         </div>
     );
-};
+});
+
+Pagination.displayName = 'Pagination';
 
 export default Pagination;

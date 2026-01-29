@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, FileDown, FilePen, Edit2, Trash } from 'lucide-react';
+import { MoreVertical, FileDown, FilePen, Edit2, Trash, Eye } from 'lucide-react';
 import { PermitRecord } from '../types';
 
 interface ActionMenuProps {
@@ -7,9 +7,10 @@ interface ActionMenuProps {
     onEdit: (record: PermitRecord) => void;
     onDelete: (id: string) => void;
     onGeneratePDF: (record: PermitRecord, forcePdf: boolean) => void;
+    onPreview?: (record: PermitRecord) => void;
 }
 
-const ActionMenu: React.FC<ActionMenuProps> = ({ record, onEdit, onDelete, onGeneratePDF }) => {
+const ActionMenu: React.FC<ActionMenuProps> = ({ record, onEdit, onDelete, onGeneratePDF, onPreview }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -24,6 +25,13 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ record, onEdit, onDelete, onGen
     }, []);
 
     const actions = [
+        ...(onPreview ? [{
+            icon: Eye,
+            label: 'Previsualizar',
+            onClick: () => onPreview(record),
+            color: 'text-purple-600 dark:text-purple-400',
+            bg: 'hover:bg-purple-50 dark:hover:bg-purple-900/30'
+        }] : []),
         {
             icon: FileDown,
             label: 'Ver PDF',

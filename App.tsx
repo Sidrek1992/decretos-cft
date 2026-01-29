@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import PermitForm from './components/PermitForm';
 import PermitTable from './components/PermitTable';
 import StatsCards from './components/StatsCards';
@@ -11,14 +11,17 @@ import DecreeBookModal from './components/DecreeBookModal';
 import CalendarView from './components/CalendarView';
 import ThemeSelector from './components/ThemeSelector';
 import NotificationCenter from './components/NotificationCenter';
+import ConfirmModal from './components/ConfirmModal';
 import { ToastContainer, useToast } from './components/Toast';
 import { useKeyboardShortcuts, ShortcutsHelpModal } from './hooks/useKeyboardShortcuts';
 import { ThemeProvider } from './hooks/useTheme';
+import { useModals } from './hooks/useModals';
 import { PermitRecord, PermitFormData, SolicitudType, Employee } from './types';
 import { exportToExcel } from './services/excelExport';
 import { useCloudSync } from './hooks/useCloudSync';
 import { useEmployeeSync } from './hooks/useEmployeeSync';
 import { useDarkMode } from './hooks/useDarkMode';
+import { calculateNextCorrelatives } from './utils/formatters';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
@@ -40,14 +43,12 @@ const AppContent: React.FC = () => {
 
   const [editingRecord, setEditingRecord] = useState<PermitRecord | null>(null);
   const [activeTab, setActiveTab] = useState<SolicitudType | 'ALL'>('ALL');
-  const [isEmployeeListOpen, setIsEmployeeListOpen] = useState(false);
-  const [isLowBalanceOpen, setIsLowBalanceOpen] = useState(false);
-  const [isDecreeBookOpen, setIsDecreeBookOpen] = useState(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
-  const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  // Hook centralizado para modales
+  const { modals, openModal, closeModal } = useModals();
 
   const formRef = useRef<HTMLElement>(null);
 
@@ -61,6 +62,9 @@ const AppContent: React.FC = () => {
     syncError,
     lastSync,
     isOnline,
+    syncWarnings,
+    pendingSync,
+    isRetryScheduled,
     fetchFromCloud,
     syncToCloud,
     undo,
@@ -70,14 +74,22 @@ const AppContent: React.FC = () => {
     (error) => toast.error('Error de sincronización', error)
   );
 
-  const nextCorrelative = useMemo(() => {
+  const lastWarningsRef = useRef('');
+
+  useEffect(() => {
+    if (syncWarnings.length === 0) return;
+    const key = syncWarnings.join('|');
+    if (key === lastWarningsRef.current) return;
+    lastWarningsRef.current = key;
+    const preview = syncWarnings.slice(0, 3).join(' · ');
+    const extra = syncWarnings.length > 3 ? ` (+${syncWarnings.length - 3} más)` : '';
+    toast.warning('Datos con formato inesperado', `${preview}${extra}`);
+  }, [syncWarnings, toast]);
+
+  // Correlativos independientes para PA y FL
+  const nextCorrelatives = useMemo(() => {
     const year = new Date().getFullYear();
-    const yearRecords = records.filter(r => r.acto && r.acto.includes(`/${year}`));
-    const max = yearRecords.length ? Math.max(...yearRecords.map(r => {
-      const parts = r.acto.split('/');
-      return parts.length > 0 ? parseInt(parts[0]) || 0 : 0;
-    })) : 0;
-    return `${(max + 1).toString().padStart(3, '0')}/${year}`;
+    return calculateNextCorrelatives(records, year);
   }, [records]);
 
   const handleSubmit = (formData: PermitFormData) => {
@@ -89,7 +101,7 @@ const AppContent: React.FC = () => {
       setEditingRecord(null);
       toast.success('Decreto actualizado', `${formData.acto} modificado correctamente`);
     } else {
-      updated = [{ ...formData, id: crypto.randomUUID(), createdAt: Date.now() }, ...records];
+      updated = [...records, { ...formData, id: crypto.randomUUID(), createdAt: Date.now() }];
       toast.success('Decreto emitido', `Resolución ${formData.acto} creada exitosamente`);
     }
     setRecords(updated);
@@ -97,13 +109,19 @@ const AppContent: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm('¿Eliminar este decreto? Esta acción se puede deshacer.')) {
-      const updated = records.filter(r => r.id !== id);
+    setDeleteTargetId(id);
+    openModal('confirmDelete');
+  };
+
+  const confirmDelete = useCallback(() => {
+    if (deleteTargetId) {
+      const updated = records.filter(r => r.id !== deleteTargetId);
       setRecords(updated);
       syncToCloud(updated);
       toast.warning('Decreto eliminado', 'Puedes deshacer esta acción');
+      setDeleteTargetId(null);
     }
-  };
+  }, [deleteTargetId, records, setRecords, syncToCloud, toast]);
 
   const handleUndo = () => {
     undo();
@@ -124,178 +142,182 @@ const AppContent: React.FC = () => {
     toast.info('Nuevo decreto', `Preparando decreto para ${employee.nombre}`);
   };
 
-  // Atajos de teclado
-  const shortcuts = [
+  // Atajos de teclado (memoizados para evitar re-renders)
+  const shortcuts = useMemo(() => [
     { key: 'n', ctrlKey: true, action: () => formRef.current?.scrollIntoView({ behavior: 'smooth' }), description: 'Nuevo decreto' },
     { key: 's', ctrlKey: true, action: () => fetchFromCloud(), description: 'Sincronizar' },
     { key: 'e', ctrlKey: true, action: () => { exportToExcel(records); toast.success('Exportado', 'Excel generado'); }, description: 'Exportar Excel' },
     { key: 'd', ctrlKey: true, action: toggleDarkMode, description: 'Cambiar tema' },
-    { key: 'b', ctrlKey: true, action: () => setIsDecreeBookOpen(true), description: 'Libro de decretos' },
+    { key: 'b', ctrlKey: true, action: () => openModal('decreeBook'), description: 'Libro de decretos' },
     { key: 'g', ctrlKey: true, action: () => setShowDashboard(p => !p), description: 'Ver gráficos' },
-    { key: 'c', ctrlKey: true, action: () => setIsCalendarOpen(true), description: 'Calendario' },
+    { key: 'c', ctrlKey: true, action: () => openModal('calendar'), description: 'Calendario' },
     { key: 'z', ctrlKey: true, action: handleUndo, description: 'Deshacer' },
-    { key: '?', action: () => setIsShortcutsOpen(true), description: 'Mostrar atajos' },
-  ];
+    { key: '?', action: () => openModal('shortcuts'), description: 'Mostrar atajos' },
+  ], [fetchFromCloud, records, toast, toggleDarkMode, openModal, handleUndo]);
 
   useKeyboardShortcuts(shortcuts);
+
+  const syncStatusLabel = isSyncing
+    ? 'Sincronizando...'
+    : !isOnline
+      ? pendingSync
+        ? 'Pendiente (offline)'
+        : 'Offline'
+      : syncError
+        ? 'Error de sincronización'
+        : pendingSync
+          ? isRetryScheduled
+            ? 'Reintentando...'
+            : 'Pendiente'
+          : 'Sincronizado';
+
+  const syncStatusDotClass = isSyncing
+    ? 'bg-indigo-500 animate-ping'
+    : pendingSync
+      ? 'bg-amber-500'
+      : syncError
+        ? 'bg-red-500'
+        : isOnline
+          ? 'bg-emerald-500'
+          : 'bg-red-500';
 
   return (
     <div className="min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-[100] w-full border-b border-slate-200 dark:border-slate-700 bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4 sm:gap-5">
-            <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-500 ${isSyncing ? 'bg-indigo-600 animate-pulse shadow-indigo-200 dark:shadow-indigo-900' : 'bg-slate-900 dark:bg-indigo-600 shadow-slate-200 dark:shadow-indigo-900'}`}>
-              <Cloud className="text-white w-5 h-5 sm:w-6 sm:h-6" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          {/* Logo y título */}
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-500 ${isSyncing ? 'bg-indigo-600 animate-pulse' : 'bg-slate-900 dark:bg-indigo-600'}`}>
+              <Cloud className="text-white w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  SGP Cloud
-                  <span className="text-[9px] sm:text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
-                    v{CONFIG.APP_VERSION}
-                  </span>
-                </h1>
-                <button
-                  onClick={() => setIsEmployeeListOpen(true)}
-                  className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/50 border border-indigo-100 dark:border-indigo-800 rounded-lg shadow-sm hover:bg-indigo-600 group transition-all"
-                >
-                  <Users className="w-3 h-3 text-indigo-600 dark:text-indigo-400 group-hover:text-white transition-colors" />
-                  <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider group-hover:text-white transition-colors">
-                    {employees.length} Personal
-                  </span>
-                </button>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-indigo-500 animate-ping' : isOnline ? 'bg-emerald-500' : 'bg-red-500'} shadow-[0_0_8px_rgba(0,0,0,0.1)]`} />
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                  {isSyncing ? 'Subiendo...' : syncError ? 'Error conexión' : isOnline ? 'Sincronizado' : 'Offline'}
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                GDP Cloud
+              </h1>
+              <span className={`w-1.5 h-1.5 rounded-full ${syncStatusDotClass}`} />
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* Info de Sheet - Solo desktop */}
-            <div className="hidden lg:flex flex-col items-end mr-2">
-              <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200/50 dark:border-slate-700">
-                <Database className={`w-3.5 h-3.5 ${syncError ? 'text-red-400' : 'text-slate-400'}`} />
-                <span className="text-[9px] font-black text-slate-600 dark:text-slate-300 uppercase">
-                  SHEET: ...{CONFIG.DECRETOS_SHEET_ID.slice(-4)}
-                </span>
-              </div>
-              {lastSync && (
-                <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase flex items-center gap-1">
-                  <CheckCircle size={9} className="text-emerald-500" />
-                  {lastSync.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
+          {/* Acciones */}
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {/* Personal - Solo desktop */}
+            <button
+              onClick={() => openModal('employeeList')}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all uppercase tracking-wider"
+            >
+              <Users className="w-3.5 h-3.5" />
+              {employees.length} Personal
+            </button>
 
-            {/* Botón Dashboard */}
+            {/* Separador */}
+            <div className="hidden lg:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+
+            {/* Botones secundarios - Solo desktop */}
             <button
               onClick={() => setShowDashboard(p => !p)}
-              className={`p-2.5 rounded-xl transition-all border shadow-sm ${showDashboard
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+              className={`hidden sm:flex p-2 rounded-lg transition-all ${showDashboard
+                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-              title="Ver gráficos (Ctrl+G)"
+              title="Gráficos"
             >
-              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
+              <BarChart3 className="w-4 h-4" />
             </button>
 
-            {/* Botón Libro de Decretos */}
             <button
-              onClick={() => setIsDecreeBookOpen(true)}
-              className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all shadow-sm"
-              title="Libro de decretos (Ctrl+B)"
+              onClick={() => openModal('decreeBook')}
+              className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              title="Libro de decretos"
             >
-              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+              <BookOpen className="w-4 h-4" />
             </button>
 
-            {/* Botón Calendario */}
             <button
-              onClick={() => setIsCalendarOpen(true)}
-              className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all shadow-sm"
-              title="Vista calendario (Ctrl+C)"
+              onClick={() => openModal('calendar')}
+              className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              title="Calendario"
             >
-              <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5" />
+              <CalendarDays className="w-4 h-4" />
             </button>
 
-            {/* Botón Undo */}
+            <button
+              onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.DECRETOS_SHEET_ID}`, '_blank')}
+              className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              title="Abrir hoja de cálculo"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </button>
+
+            {/* Separador */}
+            <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+
+            {/* Undo */}
             {canUndo && (
               <button
                 onClick={handleUndo}
-                className="p-2.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 rounded-xl transition-all hover:bg-amber-100 dark:hover:bg-amber-900/50 active:scale-95"
-                title="Deshacer última acción (Ctrl+Z)"
+                className="p-2 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all active:scale-95"
+                title="Deshacer"
               >
-                <Undo2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <Undo2 className="w-4 h-4" />
               </button>
             )}
 
-            {/* Botón Excel */}
+            {/* Excel */}
             <button
               onClick={() => {
                 exportToExcel(records);
                 toast.success('Exportado', 'Archivo Excel generado correctamente');
               }}
-              className="group flex items-center gap-2 px-3 sm:px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg hover:shadow-emerald-200 dark:hover:shadow-emerald-900 active:scale-95"
+              className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-all active:scale-95"
+              title="Exportar Excel"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span className="hidden sm:inline">Excel</span>
             </button>
 
-            {/* Botón Sync */}
+            {/* Sync */}
             <button
               onClick={() => fetchFromCloud()}
               disabled={isSyncing}
-              className={`p-2.5 rounded-xl transition-all border shadow-sm ${isSyncing
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+              className={`p-2 rounded-lg transition-all ${isSyncing
+                ? 'text-slate-300 dark:text-slate-600'
                 : syncError
-                  ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
-                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                  ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30'
+                  : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
                 }`}
+              title="Sincronizar"
             >
-              {syncError ? <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5" /> : <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncing ? 'animate-spin' : ''}`} />}
+              {syncError ? <AlertCircle className="w-4 h-4" /> : <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />}
             </button>
 
-            {/* Botón Dark Mode */}
+            {/* Dark Mode */}
             <button
               onClick={toggleDarkMode}
-              className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all shadow-sm"
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
               title={isDark ? 'Modo claro' : 'Modo oscuro'}
             >
-              {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Botón Sheets */}
+            {/* Temas - Solo desktop */}
             <button
-              onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.DECRETOS_SHEET_ID}`, '_blank')}
-              className="hidden sm:block p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all shadow-sm"
-              title="Ver hoja de cálculo"
+              onClick={() => openModal('themeSelector')}
+              className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              title="Tema"
             >
-              <ExternalLink className="w-5 h-5" />
+              <Palette className="w-4 h-4" />
             </button>
 
-            {/* Botón Temas */}
-            <button
-              onClick={() => setIsThemeSelectorOpen(true)}
-              className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 rounded-xl transition-all shadow-sm"
-              title="Personalizar tema"
-            >
-              <Palette className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-
-            {/* Centro de Notificaciones */}
+            {/* Notificaciones */}
             <NotificationCenter records={records} employees={employees} />
 
-            {/* Botón Imprimir */}
+            {/* Imprimir - Solo desktop */}
             <button
               onClick={() => window.print()}
-              className="hidden md:block p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-all shadow-sm"
-              title="Imprimir página"
+              className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              title="Imprimir"
             >
-              <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Printer className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -317,7 +339,7 @@ const AppContent: React.FC = () => {
           <Dashboard
             records={records}
             employees={employees}
-            onViewLowBalance={() => setIsLowBalanceOpen(true)}
+            onViewLowBalance={() => openModal('lowBalance')}
           />
         )}
 
@@ -328,7 +350,7 @@ const AppContent: React.FC = () => {
               onSubmit={handleSubmit}
               editingRecord={editingRecord}
               onCancelEdit={() => setEditingRecord(null)}
-              nextCorrelative={nextCorrelative}
+              nextCorrelatives={nextCorrelatives}
               employees={employees}
               records={records}
             />
@@ -364,7 +386,7 @@ const AppContent: React.FC = () => {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`flex-1 sm:flex-none px-6 sm:px-8 py-2.5 rounded-xl text-[11px] font-black tracking-widest transition-all duration-300 uppercase ${activeTab === tab
+                    className={`flex-1 sm:flex-none px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black tracking-wider sm:tracking-widest transition-all duration-300 uppercase ${activeTab === tab
                       ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md ring-1 ring-slate-200 dark:ring-slate-600'
                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                       }`}
@@ -387,8 +409,8 @@ const AppContent: React.FC = () => {
 
       {/* Modal de empleados */}
       <EmployeeListModal
-        isOpen={isEmployeeListOpen}
-        onClose={() => setIsEmployeeListOpen(false)}
+        isOpen={modals.employeeList}
+        onClose={() => closeModal('employeeList')}
         employees={employees}
         records={records}
         onAddEmployee={handleAddEmployee}
@@ -399,30 +421,45 @@ const AppContent: React.FC = () => {
 
       {/* Modal saldo bajo */}
       <LowBalanceModal
-        isOpen={isLowBalanceOpen}
-        onClose={() => setIsLowBalanceOpen(false)}
+        isOpen={modals.lowBalance}
+        onClose={() => closeModal('lowBalance')}
         records={records}
       />
 
       {/* Modal libro de decretos */}
       <DecreeBookModal
-        isOpen={isDecreeBookOpen}
-        onClose={() => setIsDecreeBookOpen(false)}
+        isOpen={modals.decreeBook}
+        onClose={() => closeModal('decreeBook')}
         records={records}
       />
 
       {/* Modal atajos de teclado */}
       <ShortcutsHelpModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
+        isOpen={modals.shortcuts}
+        onClose={() => closeModal('shortcuts')}
         shortcuts={shortcuts}
       />
 
       {/* Vista de Calendario */}
       <CalendarView
-        isOpen={isCalendarOpen}
-        onClose={() => setIsCalendarOpen(false)}
+        isOpen={modals.calendar}
+        onClose={() => closeModal('calendar')}
         records={records}
+      />
+
+      {/* Modal de confirmación de eliminación */}
+      <ConfirmModal
+        isOpen={modals.confirmDelete}
+        onClose={() => {
+          closeModal('confirmDelete');
+          setDeleteTargetId(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar decreto"
+        message="¿Estás seguro de que deseas eliminar este decreto? Esta acción se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="danger"
       />
 
       {/* Footer */}
@@ -431,18 +468,18 @@ const AppContent: React.FC = () => {
           <div className="flex items-center gap-3">
             <Cloud className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
             <span className="text-[10px] sm:text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-[0.2em] sm:tracking-[0.3em]">
-              SGP Cloud Engine 2026
+              GDP Cloud Engine 2026
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
             <button
-              onClick={() => setIsShortcutsOpen(true)}
-              className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-indigo-600 transition-colors uppercase tracking-wider"
+              onClick={() => openModal('shortcuts')}
+              className="hidden sm:flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-indigo-600 transition-colors uppercase tracking-wider"
             >
-              <Keyboard className="w-3 h-3" /> Atajos
+              <Keyboard className="w-3 h-3" aria-hidden="true" /> Atajos
             </button>
-            <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-[0.15em] sm:tracking-[0.2em] text-center">
-              Municipalidad de Gestión Avanzada v{CONFIG.APP_VERSION}
+            <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-[0.1em] sm:tracking-[0.2em] text-center leading-relaxed">
+              Herramienta Desarrollada para Gestión de Personas por Maximiliano Guzmán
             </p>
           </div>
         </div>
@@ -450,8 +487,8 @@ const AppContent: React.FC = () => {
 
       {/* Selector de Tema */}
       <ThemeSelector
-        isOpen={isThemeSelectorOpen}
-        onClose={() => setIsThemeSelectorOpen(false)}
+        isOpen={modals.themeSelector}
+        onClose={() => closeModal('themeSelector')}
       />
 
       {/* Toasts */}

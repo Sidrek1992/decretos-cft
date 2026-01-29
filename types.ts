@@ -24,6 +24,16 @@ export interface PermitRecord {
   emite: string;
   observaciones: string;
   createdAt: number;
+  // Campos específicos para FL (Feriado Legal)
+  fechaTermino?: string;
+  periodo1?: string;
+  saldoDisponibleP1?: number;
+  solicitadoP1?: number;
+  saldoFinalP1?: number;
+  periodo2?: string;
+  saldoDisponibleP2?: number;
+  solicitadoP2?: number;
+  saldoFinalP2?: number;
 }
 
 export type PermitFormData = Omit<PermitRecord, 'id' | 'createdAt'>;

@@ -97,7 +97,7 @@ class ErrorBoundary extends Component<Props, State> {
                         {/* Footer */}
                         <div className="px-8 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700">
                             <p className="text-xs text-slate-400 text-center uppercase tracking-widest">
-                                SGP Cloud • Error Recovery Module
+                                GDP Cloud • Error Recovery Module
                             </p>
                         </div>
                     </div>

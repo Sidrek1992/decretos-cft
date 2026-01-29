@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { PermitRecord } from '../types';
 import { Landmark, Sun, Users, Activity } from 'lucide-react';
 
@@ -8,15 +8,15 @@ interface StatsCardsProps {
   totalDatabaseEmployees: number;
 }
 
-const StatsCards: React.FC<StatsCardsProps> = ({ records, totalDatabaseEmployees }) => {
-  const paRecords = records.filter(r => r.solicitudType === 'PA');
-  const flRecords = records.filter(r => r.solicitudType === 'FL');
+const StatsCards: React.FC<StatsCardsProps> = React.memo(({ records, totalDatabaseEmployees }) => {
+  const stats = useMemo(() => {
+    const paRecords = records.filter(r => r.solicitudType === 'PA');
+    const flRecords = records.filter(r => r.solicitudType === 'FL');
+    const totalPADays = paRecords.reduce((acc, curr) => acc + curr.cantidadDias, 0);
+    const totalFLDays = flRecords.reduce((acc, curr) => acc + curr.cantidadDias, 0);
+    const employeesWithRecords = new Set(records.map(r => r.rut)).size;
 
-  const totalPADays = paRecords.reduce((acc, curr) => acc + curr.cantidadDias, 0);
-  const totalFLDays = flRecords.reduce((acc, curr) => acc + curr.cantidadDias, 0);
-  const employeesWithRecords = new Set(records.map(r => r.rut)).size;
-
-  const stats = [
+    return [
     {
       label: 'Decretos PA',
       value: paRecords.length,
@@ -54,6 +54,7 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records, totalDatabaseEmployees
       borderColor: 'border-emerald-100 dark:border-emerald-800/50'
     },
   ];
+  }, [records, totalDatabaseEmployees]);
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -80,6 +81,8 @@ const StatsCards: React.FC<StatsCardsProps> = ({ records, totalDatabaseEmployees
       ))}
     </div>
   );
-};
+});
+
+StatsCards.displayName = 'StatsCards';
 
 export default StatsCards;
