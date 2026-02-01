@@ -3,7 +3,19 @@
  * Solo muestra logs en desarrollo, silencia en producción
  */
 
-const isDevelopment = import.meta.env.DEV;
+// Compatible con Vite y Jest
+const isDevelopment = (() => {
+  try {
+    // En Vite
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      return import.meta.env.DEV;
+    }
+  } catch {
+    // Ignorar error
+  }
+  // En Jest o Node
+  return process.env.NODE_ENV !== 'production';
+})();
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -14,18 +26,18 @@ interface LoggerOptions {
 
 const formatMessage = (level: LogLevel, message: string, options: LoggerOptions = {}): string => {
   const parts: string[] = [];
-  
+
   if (options.showTimestamp) {
     parts.push(`[${new Date().toISOString()}]`);
   }
-  
+
   if (options.prefix) {
     parts.push(`[${options.prefix}]`);
   }
-  
+
   parts.push(`[${level.toUpperCase()}]`);
   parts.push(message);
-  
+
   return parts.join(' ');
 };
 
@@ -35,24 +47,24 @@ export const logger = {
       console.debug(formatMessage('debug', message), ...args);
     }
   },
-  
+
   info: (message: string, ...args: unknown[]) => {
     if (isDevelopment) {
       console.info(formatMessage('info', message), ...args);
     }
   },
-  
+
   warn: (message: string, ...args: unknown[]) => {
     if (isDevelopment) {
       console.warn(formatMessage('warn', message), ...args);
     }
   },
-  
+
   error: (message: string, ...args: unknown[]) => {
     // Errors always show, even in production
     console.error(formatMessage('error', message), ...args);
   },
-  
+
   // Create a namespaced logger
   create: (namespace: string): typeof logger => ({
     debug: (message: string, ...args: unknown[]) => {

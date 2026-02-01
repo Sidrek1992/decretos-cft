@@ -74,6 +74,15 @@ export const normalizePeriodoValue = (value: string): string => {
  */
 export const isValidDateRange = (dateString: string, minYear = 2020, maxYear = 2030): boolean => {
   if (!dateString) return false;
-  const date = new Date(dateString);
+
+  // Extraer el año directamente del string para evitar problemas de timezone
+  const yearMatch = dateString.match(/^(\d{4})/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1], 10);
+    return year >= minYear && year <= maxYear;
+  }
+
+  // Fallback: intentar parsear como Date
+  const date = new Date(dateString + 'T12:00:00');
   return !isNaN(date.getTime()) && date.getFullYear() >= minYear && date.getFullYear() <= maxYear;
 };

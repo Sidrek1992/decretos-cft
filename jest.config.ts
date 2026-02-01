@@ -24,6 +24,14 @@ const config: Config = {
       },
     }],
   },
+  globals: {
+    'import.meta': {
+      env: {
+        DEV: true,
+        MODE: 'test',
+      },
+    },
+  },
   collectCoverageFrom: [
     'components/**/*.{ts,tsx}',
     'hooks/**/*.{ts,tsx}',
