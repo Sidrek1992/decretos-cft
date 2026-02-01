@@ -1,17 +1,32 @@
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import PermitForm from './components/PermitForm';
 import PermitTable from './components/PermitTable';
 import StatsCards from './components/StatsCards';
-import EmployeeListModal from './components/EmployeeListModal';
 import ErrorBoundary from './components/ErrorBoundary';
-import Dashboard from './components/Dashboard';
-import LowBalanceModal from './components/LowBalanceModal';
-import DecreeBookModal from './components/DecreeBookModal';
-import CalendarView from './components/CalendarView';
-import ThemeSelector from './components/ThemeSelector';
 import NotificationCenter from './components/NotificationCenter';
 import ConfirmModal from './components/ConfirmModal';
+import LoginPage from './components/LoginPage';
+import AdminPanel from './components/AdminPanel';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+// Lazy load heavy modals for better initial performance
+const EmployeeListModal = lazy(() => import('./components/EmployeeListModal'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const LowBalanceModal = lazy(() => import('./components/LowBalanceModal'));
+const DecreeBookModal = lazy(() => import('./components/DecreeBookModal'));
+const CalendarView = lazy(() => import('./components/CalendarView'));
+const ThemeSelector = lazy(() => import('./components/ThemeSelector'));
+
+// Loading fallback component
+const ModalLoader = () => (
+  <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl">
+      <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto" />
+      <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-3">Cargando...</p>
+    </div>
+  </div>
+);
 import { ToastContainer, useToast } from './components/Toast';
 import { useKeyboardShortcuts, ShortcutsHelpModal } from './hooks/useKeyboardShortcuts';
 import { ThemeProvider } from './hooks/useTheme';
@@ -25,15 +40,19 @@ import { calculateNextCorrelatives } from './utils/formatters';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
-  Database, CheckCircle, Users, AlertCircle, Moon, Sun, Undo2, Keyboard, CalendarDays, Palette, Printer
+  Database, CheckCircle, Users, AlertCircle, Moon, Sun, Undo2, Keyboard, CalendarDays, Palette, Printer, LogOut, Settings
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
+  // ★ Autenticación y Permisos
+  const { user, signOut, permissions, role, roleLabel, roleColors } = useAuth();
+
   // Employees sincronizados con Google Sheets
   const {
     employees,
     isSyncing: isEmployeeSyncing,
     addEmployee: handleAddEmployee,
+    updateEmployee: handleUpdateEmployee,
     deleteEmployee: handleDeleteEmployee,
     fetchEmployeesFromCloud
   } = useEmployeeSync(
@@ -46,6 +65,7 @@ const AppContent: React.FC = () => {
   const [showDashboard, setShowDashboard] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // Hook centralizado para modales
   const { modals, openModal, closeModal } = useModals();
@@ -146,7 +166,16 @@ const AppContent: React.FC = () => {
   const shortcuts = useMemo(() => [
     { key: 'n', ctrlKey: true, action: () => formRef.current?.scrollIntoView({ behavior: 'smooth' }), description: 'Nuevo decreto' },
     { key: 's', ctrlKey: true, action: () => fetchFromCloud(), description: 'Sincronizar' },
-    { key: 'e', ctrlKey: true, action: () => { exportToExcel(records); toast.success('Exportado', 'Excel generado'); }, description: 'Exportar Excel' },
+    {
+      key: 'e', ctrlKey: true, action: async () => {
+        const result = await exportToExcel(records);
+        if (result.success) {
+          toast.success('Exportado', 'Excel generado');
+        } else {
+          toast.error('Error', result.error || 'No se pudo exportar');
+        }
+      }, description: 'Exportar Excel'
+    },
     { key: 'd', ctrlKey: true, action: toggleDarkMode, description: 'Cambiar tema' },
     { key: 'b', ctrlKey: true, action: () => openModal('decreeBook'), description: 'Libro de decretos' },
     { key: 'g', ctrlKey: true, action: () => setShowDashboard(p => !p), description: 'Ver gráficos' },
@@ -199,126 +228,245 @@ const AppContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Acciones */}
+          {/* ═══════════════════════════════════════════════════════════════════
+               BARRA DE ACCIONES - Organizada en grupos lógicos
+              ═══════════════════════════════════════════════════════════════════ */}
           <div className="flex items-center gap-1 sm:gap-1.5">
-            {/* Personal - Solo desktop */}
-            <button
-              onClick={() => openModal('employeeList')}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all uppercase tracking-wider"
-            >
-              <Users className="w-3.5 h-3.5" />
-              {employees.length} Personal
-            </button>
 
-            {/* Separador */}
-            <div className="hidden lg:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                GRUPO 1: DATOS (Sync, Undo) - Acciones de datos principales
+               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg px-1 py-0.5">
+              {/* Sync */}
+              <button
+                onClick={() => fetchFromCloud()}
+                disabled={isSyncing}
+                className={`p-2 rounded-lg transition-all ${isSyncing
+                  ? 'text-slate-300 dark:text-slate-600'
+                  : syncError
+                    ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30'
+                    : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                  }`}
+                title="Sincronizar datos"
+              >
+                {syncError ? <AlertCircle className="w-4 h-4" /> : <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />}
+              </button>
 
-            {/* Botones secundarios - Solo desktop */}
-            <button
-              onClick={() => setShowDashboard(p => !p)}
-              className={`hidden sm:flex p-2 rounded-lg transition-all ${showDashboard
-                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
-                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              title="Gráficos"
-            >
-              <BarChart3 className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => openModal('decreeBook')}
-              className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title="Libro de decretos"
-            >
-              <BookOpen className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => openModal('calendar')}
-              className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title="Calendario"
-            >
-              <CalendarDays className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.DECRETOS_SHEET_ID}`, '_blank')}
-              className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title="Abrir hoja de cálculo"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </button>
+              {/* Undo - Solo aparece cuando hay algo para deshacer */}
+              {canUndo && (
+                <button
+                  onClick={handleUndo}
+                  className="p-2 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all active:scale-95"
+                  title="Deshacer última acción"
+                >
+                  <Undo2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
             {/* Separador */}
             <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
 
-            {/* Undo */}
-            {canUndo && (
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                GRUPO 2: VISTAS (Dashboard, Libro, Calendario, Personal)
+               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="hidden sm:flex items-center gap-1">
+              {/* Dashboard */}
               <button
-                onClick={handleUndo}
-                className="p-2 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all active:scale-95"
-                title="Deshacer"
+                onClick={() => setShowDashboard(p => !p)}
+                className={`p-2 rounded-lg transition-all ${showDashboard
+                  ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
+                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                title="Panel de estadísticas"
               >
-                <Undo2 className="w-4 h-4" />
+                <BarChart3 className="w-4 h-4" />
               </button>
-            )}
 
-            {/* Excel */}
-            <button
-              onClick={() => {
-                exportToExcel(records);
-                toast.success('Exportado', 'Archivo Excel generado correctamente');
-              }}
-              className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-all active:scale-95"
-              title="Exportar Excel"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-            </button>
+              {/* Libro de decretos */}
+              <button
+                onClick={() => openModal('decreeBook')}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                title="Libro de decretos"
+              >
+                <BookOpen className="w-4 h-4" />
+              </button>
 
-            {/* Sync */}
-            <button
-              onClick={() => fetchFromCloud()}
-              disabled={isSyncing}
-              className={`p-2 rounded-lg transition-all ${isSyncing
-                ? 'text-slate-300 dark:text-slate-600'
-                : syncError
-                  ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30'
-                  : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                }`}
-              title="Sincronizar"
-            >
-              {syncError ? <AlertCircle className="w-4 h-4" /> : <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />}
-            </button>
+              {/* Calendario */}
+              <button
+                onClick={() => openModal('calendar')}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                title="Calendario de ausencias"
+              >
+                <CalendarDays className="w-4 h-4" />
+              </button>
 
-            {/* Dark Mode */}
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title={isDark ? 'Modo claro' : 'Modo oscuro'}
-            >
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
+              {/* Personal */}
+              <button
+                onClick={() => openModal('employeeList')}
+                className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all uppercase tracking-wider"
+              >
+                <Users className="w-3.5 h-3.5" />
+                {employees.length}
+              </button>
+            </div>
 
-            {/* Temas - Solo desktop */}
-            <button
-              onClick={() => openModal('themeSelector')}
-              className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title="Tema"
-            >
-              <Palette className="w-4 h-4" />
-            </button>
+            {/* Separador */}
+            <div className="hidden md:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
 
-            {/* Notificaciones */}
-            <NotificationCenter records={records} employees={employees} />
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                GRUPO 3: EXPORTACIÓN (Excel, Sheets, Imprimir)
+               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="hidden md:flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/20 rounded-lg px-1 py-0.5">
+              {/* Excel */}
+              <button
+                onClick={async () => {
+                  const result = await exportToExcel(records);
+                  if (result.success) {
+                    toast.success('Exportado', 'Archivo Excel generado correctamente');
+                  } else {
+                    toast.error('Error', result.error || 'No se pudo exportar el archivo');
+                  }
+                }}
+                className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all active:scale-95"
+                title="Exportar a Excel"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+              </button>
 
-            {/* Imprimir - Solo desktop */}
-            <button
-              onClick={() => window.print()}
-              className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-              title="Imprimir"
-            >
-              <Printer className="w-4 h-4" />
-            </button>
+              {/* Menú desplegable de hojas de cálculo */}
+              <div className="relative group">
+                <button
+                  className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all flex items-center gap-1"
+                  title="Abrir hojas de Google"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+
+                {/* Dropdown */}
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 overflow-hidden">
+                  <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-2">Hojas de Cálculo</p>
+                  </div>
+
+                  {/* Permisos Administrativos */}
+                  <button
+                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.DECRETOS_SHEET_ID}`, '_blank')}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors text-left"
+                  >
+                    <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg flex items-center justify-center">
+                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">PA</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Permisos Administrativos</p>
+                      <p className="text-[10px] text-slate-400">Decretos de permisos</p>
+                    </div>
+                  </button>
+
+                  {/* Feriado Legal 1 Período */}
+                  <button
+                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.FERIADOS_SHEET_ID}`, '_blank')}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors text-left"
+                  >
+                    <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg flex items-center justify-center">
+                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">FL</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Feriado Legal 1P</p>
+                      <p className="text-[10px] text-slate-400">Un período</p>
+                    </div>
+                  </button>
+
+                  {/* Feriado Legal 2 Períodos */}
+                  <button
+                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.FERIADOS_2P_SHEET_ID}`, '_blank')}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors text-left"
+                  >
+                    <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/50 rounded-lg flex items-center justify-center">
+                      <span className="text-xs font-black text-amber-600 dark:text-amber-400">2P</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Feriado Legal 2P</p>
+                      <p className="text-[10px] text-slate-400">Dos períodos</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Imprimir */}
+              <button
+                onClick={() => window.print()}
+                className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all"
+                title="Imprimir página"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Separador */}
+            <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                GRUPO 4: PREFERENCIAS (Tema, Dark Mode, Notificaciones)
+               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="flex items-center gap-1">
+              {/* Dark Mode */}
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              >
+                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              {/* Tema - Solo desktop */}
+              <button
+                onClick={() => openModal('themeSelector')}
+                className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                title="Personalizar tema"
+              >
+                <Palette className="w-4 h-4" />
+              </button>
+
+              {/* Notificaciones */}
+              <NotificationCenter records={records} employees={employees} />
+            </div>
+
+            {/* Separador principal antes de sesión */}
+            <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-2" />
+
+            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                GRUPO 5: SESIÓN (Usuario, Rol, Admin, Logout)
+               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            <div className="flex items-center gap-2">
+              {/* Badge del rol */}
+              <span className={`hidden sm:inline-flex px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
+                {roleLabel}
+              </span>
+              <span className="hidden lg:block text-[10px] font-bold text-slate-400 dark:text-slate-500 truncate max-w-[100px]">
+                {user?.email}
+              </span>
+
+              {/* Admin Panel - Solo para admins */}
+              {role === 'admin' && (
+                <button
+                  onClick={() => setShowAdminPanel(true)}
+                  className="p-2 rounded-lg text-purple-500 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all"
+                  title="Panel de Administración"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Logout */}
+              <button
+                onClick={() => signOut()}
+                className="p-2 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -334,27 +482,49 @@ const AppContent: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-10 sm:space-y-12">
         <StatsCards records={records} totalDatabaseEmployees={employees.length} />
 
-        {/* Dashboard condicional */}
+        {/* Dashboard condicional (lazy loaded) */}
         {showDashboard && (
-          <Dashboard
-            records={records}
-            employees={employees}
-            onViewLowBalance={() => openModal('lowBalance')}
-          />
+          <Suspense fallback={
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 animate-pulse">
+              <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded-xl" />
+            </div>
+          }>
+            <Dashboard
+              records={records}
+              employees={employees}
+              onViewLowBalance={() => openModal('lowBalance')}
+            />
+          </Suspense>
         )}
 
         <div className="space-y-10 sm:space-y-12">
-          {/* Formulario */}
-          <section ref={formRef}>
-            <PermitForm
-              onSubmit={handleSubmit}
-              editingRecord={editingRecord}
-              onCancelEdit={() => setEditingRecord(null)}
-              nextCorrelatives={nextCorrelatives}
-              employees={employees}
-              records={records}
-            />
-          </section>
+          {/* Formulario - Solo para administradores */}
+          {permissions.canCreateDecree && (
+            <section ref={formRef}>
+              <PermitForm
+                onSubmit={handleSubmit}
+                editingRecord={editingRecord}
+                onCancelEdit={() => setEditingRecord(null)}
+                nextCorrelatives={nextCorrelatives}
+                employees={employees}
+                records={records}
+              />
+            </section>
+          )}
+
+          {/* Mensaje para lectores */}
+          {!permissions.canCreateDecree && (
+            <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-6">
+              <div className="flex items-center gap-3">
+                <div className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
+                  {roleLabel}
+                </div>
+                <p className="text-sm text-sky-700 dark:text-sky-300">
+                  Tu rol es de <strong>lectura</strong>. Puedes consultar los registros y generar documentos PDF, pero no crear ni modificar decretos.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Tabla */}
           <section className="space-y-6 sm:space-y-8">
@@ -402,36 +572,51 @@ const AppContent: React.FC = () => {
               activeTab={activeTab}
               onDelete={handleDelete}
               onEdit={setEditingRecord}
+              canEdit={permissions.canEditDecree}
+              canDelete={permissions.canDeleteDecree}
             />
           </section>
         </div>
       </main>
 
-      {/* Modal de empleados */}
-      <EmployeeListModal
-        isOpen={modals.employeeList}
-        onClose={() => closeModal('employeeList')}
-        employees={employees}
-        records={records}
-        onAddEmployee={handleAddEmployee}
-        onDeleteEmployee={handleDeleteEmployee}
-        onFilterByEmployee={handleFilterByEmployee}
-        onQuickDecree={handleQuickDecree}
-      />
+      {/* Modal de empleados (lazy loaded) */}
+      {modals.employeeList && (
+        <Suspense fallback={<ModalLoader />}>
+          <EmployeeListModal
+            isOpen={modals.employeeList}
+            onClose={() => closeModal('employeeList')}
+            employees={employees}
+            records={records}
+            onAddEmployee={permissions.canManageEmployees ? handleAddEmployee : undefined}
+            onUpdateEmployee={permissions.canManageEmployees ? handleUpdateEmployee : undefined}
+            onDeleteEmployee={permissions.canManageEmployees ? handleDeleteEmployee : undefined}
+            onFilterByEmployee={handleFilterByEmployee}
+            onQuickDecree={permissions.canCreateDecree ? handleQuickDecree : undefined}
+          />
+        </Suspense>
+      )}
 
-      {/* Modal saldo bajo */}
-      <LowBalanceModal
-        isOpen={modals.lowBalance}
-        onClose={() => closeModal('lowBalance')}
-        records={records}
-      />
+      {/* Modal saldo bajo (lazy loaded) */}
+      {modals.lowBalance && (
+        <Suspense fallback={<ModalLoader />}>
+          <LowBalanceModal
+            isOpen={modals.lowBalance}
+            onClose={() => closeModal('lowBalance')}
+            records={records}
+          />
+        </Suspense>
+      )}
 
-      {/* Modal libro de decretos */}
-      <DecreeBookModal
-        isOpen={modals.decreeBook}
-        onClose={() => closeModal('decreeBook')}
-        records={records}
-      />
+      {/* Modal libro de decretos (lazy loaded) */}
+      {modals.decreeBook && (
+        <Suspense fallback={<ModalLoader />}>
+          <DecreeBookModal
+            isOpen={modals.decreeBook}
+            onClose={() => closeModal('decreeBook')}
+            records={records}
+          />
+        </Suspense>
+      )}
 
       {/* Modal atajos de teclado */}
       <ShortcutsHelpModal
@@ -440,12 +625,16 @@ const AppContent: React.FC = () => {
         shortcuts={shortcuts}
       />
 
-      {/* Vista de Calendario */}
-      <CalendarView
-        isOpen={modals.calendar}
-        onClose={() => closeModal('calendar')}
-        records={records}
-      />
+      {/* Vista de Calendario (lazy loaded) */}
+      {modals.calendar && (
+        <Suspense fallback={<ModalLoader />}>
+          <CalendarView
+            isOpen={modals.calendar}
+            onClose={() => closeModal('calendar')}
+            records={records}
+          />
+        </Suspense>
+      )}
 
       {/* Modal de confirmación de eliminación */}
       <ConfirmModal
@@ -460,6 +649,12 @@ const AppContent: React.FC = () => {
         confirmText="Eliminar"
         cancelText="Cancelar"
         variant="danger"
+      />
+
+      {/* ★ Panel de Administración */}
+      <AdminPanel
+        isOpen={showAdminPanel}
+        onClose={() => setShowAdminPanel(false)}
       />
 
       {/* Footer */}
@@ -485,11 +680,15 @@ const AppContent: React.FC = () => {
         </div>
       </footer>
 
-      {/* Selector de Tema */}
-      <ThemeSelector
-        isOpen={modals.themeSelector}
-        onClose={() => closeModal('themeSelector')}
-      />
+      {/* Selector de Tema (lazy loaded) */}
+      {modals.themeSelector && (
+        <Suspense fallback={<ModalLoader />}>
+          <ThemeSelector
+            isOpen={modals.themeSelector}
+            onClose={() => closeModal('themeSelector')}
+          />
+        </Suspense>
+      )}
 
       {/* Toasts */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -497,11 +696,38 @@ const AppContent: React.FC = () => {
   );
 };
 
-// Wrapper con ErrorBoundary y ThemeProvider
+// ★ Componente que maneja la autenticación
+const AuthenticatedApp: React.FC = () => {
+  const { user, loading } = useAuth();
+
+  // Mostrar loader mientras se verifica la sesión
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto" />
+          <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-4">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar login si no hay usuario
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // Usuario autenticado, mostrar la app
+  return <AppContent />;
+};
+
+// Wrapper con ErrorBoundary, ThemeProvider y AuthProvider
 const App: React.FC = () => (
   <ThemeProvider>
     <ErrorBoundary>
-      <AppContent />
+      <AuthProvider>
+        <AuthenticatedApp />
+      </AuthProvider>
     </ErrorBoundary>
   </ThemeProvider>
 );

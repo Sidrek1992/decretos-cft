@@ -1,0 +1,337 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   SISTEMA DE TEMAS DE COLORES
+   ============================================ */
+:root,
+[data-theme="default"] {
+  --color-primary: 79 70 229;
+  /* indigo-600 */
+  --color-primary-hover: 67 56 202;
+  /* indigo-700 */
+  --color-primary-light: 238 242 255;
+  /* indigo-50 */
+  --color-accent: 99 102 241;
+  /* indigo-500 */
+  --gradient-from: #6366f1;
+  --gradient-to: #0ea5e9;
+}
+
+[data-theme="ocean"] {
+  --color-primary: 8 145 178;
+  /* cyan-600 */
+  --color-primary-hover: 14 116 144;
+  /* cyan-700 */
+  --color-primary-light: 236 254 255;
+  /* cyan-50 */
+  --color-accent: 6 182 212;
+  /* cyan-500 */
+  --gradient-from: #06b6d4;
+  --gradient-to: #3b82f6;
+}
+
+[data-theme="forest"] {
+  --color-primary: 5 150 105;
+  /* emerald-600 */
+  --color-primary-hover: 4 120 87;
+  /* emerald-700 */
+  --color-primary-light: 236 253 245;
+  /* emerald-50 */
+  --color-accent: 16 185 129;
+  /* emerald-500 */
+  --gradient-from: #10b981;
+  --gradient-to: #14b8a6;
+}
+
+[data-theme="sunset"] {
+  --color-primary: 234 88 12;
+  /* orange-600 */
+  --color-primary-hover: 194 65 12;
+  /* orange-700 */
+  --color-primary-light: 255 247 237;
+  /* orange-50 */
+  --color-accent: 249 115 22;
+  /* orange-500 */
+  --gradient-from: #f97316;
+  --gradient-to: #f43f5e;
+}
+
+[data-theme="purple"] {
+  --color-primary: 124 58 237;
+  /* violet-600 */
+  --color-primary-hover: 109 40 217;
+  /* violet-700 */
+  --color-primary-light: 245 243 255;
+  /* violet-50 */
+  --color-accent: 139 92 246;
+  /* violet-500 */
+  --gradient-from: #8b5cf6;
+  --gradient-to: #a855f7;
+}
+
+[data-theme="rose"] {
+  --color-primary: 225 29 72;
+  /* rose-600 */
+  --color-primary-hover: 190 18 60;
+  /* rose-700 */
+  --color-primary-light: 255 241 242;
+  /* rose-50 */
+  --color-accent: 244 63 94;
+  /* rose-500 */
+  --gradient-from: #f43f5e;
+  --gradient-to: #ec4899;
+}
+
+/* Aplicar colores dinámicos a elementos */
+@layer components {
+  .theme-primary {
+    @apply bg-[rgb(var(--color-primary))];
+  }
+
+  .theme-primary:hover {
+    @apply bg-[rgb(var(--color-primary-hover))];
+  }
+
+  .theme-primary-text {
+    @apply text-[rgb(var(--color-primary))];
+  }
+
+  .theme-primary-light {
+    @apply bg-[rgb(var(--color-primary-light))];
+  }
+
+  .theme-gradient {
+    background: linear-gradient(to right, var(--gradient-from), var(--gradient-to));
+  }
+
+  .theme-border {
+    @apply border-[rgb(var(--color-primary))];
+  }
+}
+
+/* Base styles */
+@layer base {
+  body {
+    @apply font-sans text-slate-900 dark:text-slate-100;
+    background-color: #f8fafc;
+    background-image:
+      radial-gradient(at 0% 0%, rgb(var(--color-primary) / 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgb(var(--color-accent) / 0.08) 0px, transparent 50%);
+    min-height: 100vh;
+  }
+
+  /* Dark mode background */
+  .dark body,
+  html.dark body {
+    background-color: #0f172a;
+    background-image:
+      radial-gradient(at 0% 0%, rgb(var(--color-primary) / 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgb(var(--color-accent) / 0.15) 0px, transparent 50%);
+  }
+}
+
+/* Scrollbar personalizado */
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-300;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-600;
+  }
+
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04);
+}
+
+.dark .glass-card {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Skeleton loader */
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+
+/* Improved focus states */
+*:focus-visible {
+  @apply outline-2 outline-offset-2 outline-indigo-500;
+}
+
+/* Smooth transitions for dark mode */
+*,
+*::before,
+*::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Selection */
+::selection {
+  @apply bg-indigo-100 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-100;
+}
+
+/* ============================================
+   ESTILOS DE IMPRESIÓN
+   ============================================ */
+@media print {
+  /* Ocultar elementos de UI innecesarios */
+  header,
+  footer,
+  nav,
+  .no-print,
+  button:not(.print-show),
+  [data-print-hide],
+  .animate-pulse,
+  .animate-bounce,
+  .animate-float {
+    display: none !important;
+  }
+
+  /* Reset del fondo */
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: black !important;
+    font-size: 12pt !important;
+    line-height: 1.4 !important;
+  }
+
+  html.dark body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Mostrar elementos marcados para impresión */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Ajustar contenedor principal */
+  main,
+  .main-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Cards y contenedores */
+  .glass-card,
+  [class*="rounded-"],
+  [class*="shadow-"] {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: 1px solid #e5e5e5 !important;
+    background: white !important;
+  }
+
+  /* Textos */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: black !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Tablas */
+  table {
+    page-break-inside: avoid !important;
+    width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr,
+  td,
+  th {
+    page-break-inside: avoid !important;
+  }
+
+  /* Links */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Evitar cortes de página en elementos importantes */
+  .page-break-avoid {
+    page-break-inside: avoid !important;
+  }
+
+  .page-break-before {
+    page-break-before: always !important;
+  }
+
+  .page-break-after {
+    page-break-after: always !important;
+  }
+
+  /* Configuración de página */
+  @page {
+    size: letter portrait;
+    margin: 1.5cm;
+  }
+
+  /* Decreto: Estilo especial para impresión */
+  .decreto-print {
+    padding: 2cm !important;
+    font-family: 'Times New Roman', serif !important;
+    font-size: 12pt !important;
+    line-height: 1.6 !important;
+  }
+
+  .decreto-print h1 {
+    text-align: center !important;
+    font-size: 16pt !important;
+    margin-bottom: 1cm !important;
+  }
+
+  .decreto-print .firma {
+    margin-top: 2cm !important;
+    text-align: center !important;
+  }
+}
+
+/* Clase para ocultar solo en impresión */
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}

@@ -1,23 +1,27 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Employee, PermitRecord } from '../types';
 import {
   X, Search, Users, UserCircle, TrendingUp, TrendingDown,
   Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp,
   ArrowUpDown, Filter, Download, AlertTriangle, CheckCircle,
-  Clock, Award, Edit3, Eye, XCircle
+  Clock, Award, Edit3, Eye, XCircle, Upload, Save, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-import * as XLSX from 'xlsx';
+import { logger } from '../utils/logger';
+import EmployeeTimeline from './EmployeeTimeline';
+
+const employeeModalLogger = logger.create('EmployeeModal');
 
 interface EmployeeListModalProps {
   isOpen: boolean;
   onClose: () => void;
   employees: Employee[];
   records: PermitRecord[];
-  onAddEmployee: (employee: Employee) => void;
-  onDeleteEmployee: (rut: string) => void;
+  onAddEmployee?: (employee: Employee) => void;      // ★ Ahora opcional
+  onUpdateEmployee?: (oldRut: string, updatedEmployee: Employee) => void;
+  onDeleteEmployee?: (rut: string) => void;          // ★ Ahora opcional
   onFilterByEmployee?: (funcionario: string) => void;
   onQuickDecree?: (employee: Employee) => void;
 }
@@ -25,6 +29,7 @@ interface EmployeeListModalProps {
 type SortField = 'nombre' | 'totalDecrees' | 'diasPA' | 'diasFL' | 'saldo';
 type SortOrder = 'asc' | 'desc';
 type BalanceFilter = 'all' | 'high' | 'medium' | 'low';
+type DateFilter = 'all' | 'thisMonth' | 'thisYear' | 'noRecent';
 
 interface EmployeeStats {
   totalDecrees: number;
@@ -36,12 +41,15 @@ interface EmployeeStats {
   decrees: PermitRecord[];
 }
 
+const ITEMS_PER_PAGE = 20;
+
 const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   isOpen,
   onClose,
   employees,
   records,
   onAddEmployee,
+  onUpdateEmployee,
   onDeleteEmployee,
   onFilterByEmployee,
   onQuickDecree
@@ -50,10 +58,20 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEmployee, setNewEmployee] = useState({ nombre: '', rut: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  // Edición in-line
+  const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ nombre: '', rut: '' });
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  // Importación masiva
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<Employee[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Calcular estadísticas por funcionario (ANTES del return condicional para cumplir reglas de hooks)
   const employeeStats = useMemo(() => {
@@ -105,6 +123,11 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
   // Filtrar y ordenar
   const filteredEmployees = useMemo(() => {
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).getTime();
+
     return employees
       .filter(e => {
         const matchesSearch =
@@ -114,11 +137,25 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
         if (!matchesSearch) return false;
 
         const stats = employeeStats[e.rut];
-        if (!stats) return true;
+        if (!stats) return balanceFilter === 'all' && dateFilter === 'all';
 
-        if (balanceFilter === 'high') return stats.saldo >= 4;
-        if (balanceFilter === 'medium') return stats.saldo >= 2 && stats.saldo < 4;
-        if (balanceFilter === 'low') return stats.saldo < 2;
+        // Filtro por saldo
+        if (balanceFilter === 'high' && stats.saldo < 4) return false;
+        if (balanceFilter === 'medium' && (stats.saldo < 2 || stats.saldo >= 4)) return false;
+        if (balanceFilter === 'low' && stats.saldo >= 2) return false;
+
+        // Filtro por fecha
+        if (dateFilter !== 'all') {
+          const lastDecreeDate = stats.lastDecree ? new Date(stats.lastDecree.fechaInicio) : null;
+
+          if (dateFilter === 'thisMonth') {
+            if (!lastDecreeDate || lastDecreeDate.getMonth() !== thisMonth || lastDecreeDate.getFullYear() !== thisYear) return false;
+          } else if (dateFilter === 'thisYear') {
+            if (!lastDecreeDate || lastDecreeDate.getFullYear() !== thisYear) return false;
+          } else if (dateFilter === 'noRecent') {
+            if (stats.lastDecree && stats.lastDecree.createdAt > threeMonthsAgo) return false;
+          }
+        }
 
         return true;
       })
@@ -142,7 +179,19 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
         if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
         return 0;
       });
-  }, [employees, search, sortField, sortOrder, balanceFilter, employeeStats]);
+  }, [employees, search, sortField, sortOrder, balanceFilter, dateFilter, employeeStats]);
+
+  // Paginación
+  const totalPages = Math.ceil(filteredEmployees.length / ITEMS_PER_PAGE);
+  const paginatedEmployees = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredEmployees.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredEmployees, currentPage]);
+
+  // Reset página cuando cambian filtros
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [search, balanceFilter, dateFilter]);
 
   // Focus trap para accesibilidad
   const { containerRef, handleKeyDown } = useFocusTrap({
@@ -177,6 +226,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
   const handleAddEmployee = () => {
     if (!newEmployee.nombre.trim() || !newEmployee.rut.trim()) return;
+    if (!onAddEmployee) return; // ★ Verificar que existe
 
     // Validar RUT duplicado
     if (employees.some(e => e.rut === newEmployee.rut)) {
@@ -193,28 +243,154 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   };
 
   const handleDeleteEmployee = (rut: string) => {
+    if (!onDeleteEmployee) return; // ★ Verificar que existe
     onDeleteEmployee(rut);
     setDeleteConfirm(null);
   };
 
-  const exportEmployeesToExcel = () => {
-    const data = filteredEmployees.map(emp => {
-      const stats = employeeStats[emp.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, lastDecree: null };
-      return {
-        'Nombre': emp.nombre,
-        'RUT': emp.rut,
-        'Total Decretos': stats.totalDecrees,
-        'Días PA': stats.diasPA,
-        'Días FL': stats.diasFL,
-        'Saldo': stats.saldo,
-        'Último Decreto': stats.lastDecree ? stats.lastDecree.acto : '-'
-      };
-    });
+  const exportEmployeesToExcel = async () => {
+    try {
+      employeeModalLogger.info('Exportando lista de empleados...');
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Funcionarios');
-    XLSX.writeFile(wb, `funcionarios_${new Date().toISOString().split('T')[0]}.xlsx`);
+      // Dynamic import - XLSX solo se carga cuando se necesita
+      const XLSX = await import('xlsx');
+
+      const data = filteredEmployees.map(emp => {
+        const stats = employeeStats[emp.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, lastDecree: null };
+        return {
+          'Nombre': emp.nombre,
+          'RUT': emp.rut,
+          'Total Decretos': stats.totalDecrees,
+          'Días PA': stats.diasPA,
+          'Días FL': stats.diasFL,
+          'Saldo': stats.saldo,
+          'Último Decreto': stats.lastDecree ? stats.lastDecree.acto : '-'
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Funcionarios');
+      XLSX.writeFile(wb, `funcionarios_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      employeeModalLogger.info('Exportación completada');
+    } catch (err) {
+      employeeModalLogger.error('Error exportando empleados:', err);
+    }
+  };
+
+  // Funciones de edición in-line
+  const startEdit = (emp: Employee) => {
+    setEditingEmployee(emp.rut);
+    setEditForm({ nombre: emp.nombre, rut: emp.rut });
+  };
+
+  const saveEdit = (oldRut: string) => {
+    if (!editForm.nombre.trim() || !editForm.rut.trim()) return;
+
+    // Validar RUT duplicado si cambió
+    if (editForm.rut !== oldRut && employees.some(e => e.rut === editForm.rut)) {
+      alert('Ya existe un funcionario con este RUT');
+      return;
+    }
+
+    if (onUpdateEmployee) {
+      onUpdateEmployee(oldRut, {
+        nombre: editForm.nombre.trim().toUpperCase(),
+        rut: editForm.rut.trim()
+      });
+    }
+    setEditingEmployee(null);
+    setEditForm({ nombre: '', rut: '' });
+  };
+
+  const cancelEdit = () => {
+    setEditingEmployee(null);
+    setEditForm({ nombre: '', rut: '' });
+  };
+
+  // Importación masiva desde Excel
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const XLSX = await import('xlsx');
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+
+        // Procesar filas (asumiendo: Nombre en col 0/1, RUT en col 1/2)
+        const imported: Employee[] = [];
+        for (let i = 1; i < jsonData.length; i++) { // Saltar header
+          const row = jsonData[i];
+          if (!row || row.length < 2) continue;
+
+          let nombre = '';
+          let rut = '';
+
+          // Intentar detectar estructura
+          if (typeof row[0] === 'string' && typeof row[1] === 'string') {
+            if (row[1].includes('-') || row[1].match(/^\d/)) {
+              // Col 0 = nombre, Col 1 = RUT
+              nombre = String(row[0]).trim().toUpperCase();
+              rut = String(row[1]).trim();
+            } else if (row.length >= 3) {
+              // Múltiples columnas de nombre
+              nombre = [row[0], row[1], row[2]].filter(Boolean).join(' ').trim().toUpperCase();
+              rut = String(row[3] || row[2] || '').trim();
+            }
+          }
+
+          if (nombre && rut && !employees.some(e => e.rut === rut)) {
+            imported.push({ nombre, rut });
+          }
+        }
+
+        setImportData(imported);
+        setShowImportModal(true);
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      employeeModalLogger.error('Error importando archivo:', err);
+      alert('Error al procesar el archivo. Asegúrese de que sea un Excel válido.');
+    }
+
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const processImport = () => {
+    if (!onAddEmployee) return; // ★ Verificar que existe
+    importData.forEach(emp => onAddEmployee(emp));
+    setImportData([]);
+    setShowImportModal(false);
+    employeeModalLogger.info(`Importados ${importData.length} funcionarios`);
+  };
+
+  // Calcular tasa de uso mensual para proyección
+  const getMonthlyRate = (stats: EmployeeStats) => {
+    if (stats.totalDecrees === 0) return 0;
+    const oldestDecree = stats.decrees[stats.decrees.length - 1];
+    if (!oldestDecree) return 0;
+    const months = Math.max(1, (Date.now() - oldestDecree.createdAt) / (1000 * 60 * 60 * 24 * 30));
+    return stats.diasPA / months;
+  };
+
+  const getProjectedExhaustion = (stats: EmployeeStats) => {
+    const rate = getMonthlyRate(stats);
+    if (rate <= 0) return null;
+    const monthsRemaining = stats.saldo / rate;
+    if (monthsRemaining > 12) return null;
+    const exhaustionDate = new Date();
+    exhaustionDate.setMonth(exhaustionDate.getMonth() + Math.floor(monthsRemaining));
+    return exhaustionDate;
   };
 
   return (
@@ -235,268 +411,262 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
         className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header con Stats Globales */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 p-6 sm:p-8 text-white relative overflow-hidden flex-shrink-0">
-          <div className="absolute top-0 right-0 p-4 opacity-5 scale-150 pointer-events-none">
-            <Users size={120} />
-          </div>
-
-          <div className="flex items-center justify-between z-10 relative mb-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md shadow-lg">
-                <Users className="w-6 h-6" />
+        {/* Header Compacto */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-900 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 px-4 sm:px-6 py-3 text-white flex-shrink-0">
+          <div className="flex items-center justify-between gap-4">
+            {/* Título */}
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <Users className="w-5 h-5" />
               </div>
               <div>
-                <h2 id="employee-modal-title" className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
+                <h2 id="employee-modal-title" className="text-sm sm:text-base font-extrabold uppercase tracking-tight">
                   Gestión de Personal
                 </h2>
-                <p className="text-[10px] sm:text-[11px] font-bold uppercase opacity-60 tracking-[0.15em] sm:tracking-[0.2em] mt-1">
-                  {employees.length} funcionarios registrados
+                <p className="text-[9px] font-bold uppercase opacity-60 tracking-wider">
+                  {employees.length} funcionarios
                 </p>
               </div>
             </div>
 
+            {/* Stats Inline */}
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-lg">
+                <FileText size={10} className="opacity-60" />
+                <span className="text-xs font-black">{globalStats.totalDecrees}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-500/30 rounded-lg">
+                <span className="text-[9px] font-bold opacity-70">PA</span>
+                <span className="text-xs font-black text-indigo-300">{globalStats.totalDiasPA}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/30 rounded-lg">
+                <span className="text-[9px] font-bold opacity-70">FL</span>
+                <span className="text-xs font-black text-amber-300">{globalStats.totalDiasFL}</span>
+              </div>
+              {globalStats.lowBalanceCount > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/30 rounded-lg">
+                  <AlertTriangle size={10} className="text-red-300" />
+                  <span className="text-xs font-black text-red-300">{globalStats.lowBalanceCount}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Acciones */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowAddForm(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-lg"
-              >
-                <Plus size={14} />
-                <span className="hidden sm:inline">Añadir</span>
-              </button>
+              {/* ★ Solo mostrar Añadir si tiene permisos */}
+              {onAddEmployee && (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all"
+                >
+                  <Plus size={12} />
+                  <span className="hidden sm:inline">Añadir</span>
+                </button>
+              )}
               <button
                 onClick={onClose}
-                className="p-2.5 hover:bg-white/20 rounded-xl transition-all border border-white/20"
+                className="p-2 hover:bg-white/20 rounded-lg transition-all"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
-            </div>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-              <div className="flex items-center gap-2 text-white/60 mb-1">
-                <FileText size={12} />
-                <span className="text-[9px] font-bold uppercase tracking-wider">Decretos</span>
-              </div>
-              <p className="text-lg sm:text-xl font-black">{globalStats.totalDecrees}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-              <div className="flex items-center gap-2 text-white/60 mb-1">
-                <Calendar size={12} />
-                <span className="text-[9px] font-bold uppercase tracking-wider">Días PA</span>
-              </div>
-              <p className="text-lg sm:text-xl font-black text-indigo-300">{globalStats.totalDiasPA}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-              <div className="flex items-center gap-2 text-white/60 mb-1">
-                <Award size={12} />
-                <span className="text-[9px] font-bold uppercase tracking-wider">Días FL</span>
-              </div>
-              <p className="text-lg sm:text-xl font-black text-amber-300">{globalStats.totalDiasFL}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-              <div className="flex items-center gap-2 text-white/60 mb-1">
-                <TrendingUp size={12} />
-                <span className="text-[9px] font-bold uppercase tracking-wider">Promedio</span>
-              </div>
-              <p className="text-lg sm:text-xl font-black">{globalStats.avgPerEmployee}</p>
-            </div>
-            <div className="bg-red-500/20 backdrop-blur-sm rounded-xl p-3 border border-red-400/30 col-span-2 sm:col-span-1">
-              <div className="flex items-center gap-2 text-red-300 mb-1">
-                <AlertTriangle size={12} />
-                <span className="text-[9px] font-bold uppercase tracking-wider">Saldo Bajo</span>
-              </div>
-              <p className="text-lg sm:text-xl font-black text-red-300">{globalStats.lowBalanceCount}</p>
             </div>
           </div>
         </div>
 
-        {/* Toolbar: Search + Filters */}
-        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-700 flex-shrink-0 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+        {/* Toolbar Compacto */}
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex-shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Search */}
-            <div className="relative flex-1">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 p-1.5 bg-indigo-50 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400">
-                <Search size={16} />
-              </div>
+            <div className="relative flex-1 min-w-[180px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 placeholder="Buscar por nombre o RUT..."
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/50 focus:border-indigo-200 dark:focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/50 focus:border-indigo-300 dark:focus:border-indigo-600 font-bold text-[11px] uppercase tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
             </div>
 
-            {/* Filter by Saldo */}
-            <div className="flex items-center gap-2">
-              <div className="flex bg-slate-100 dark:bg-slate-700 rounded-xl p-1 gap-1">
-                {[
-                  { key: 'all', label: 'Todos', color: '' },
-                  { key: 'high', label: 'Alto', color: 'text-emerald-600' },
-                  { key: 'medium', label: 'Medio', color: 'text-amber-600' },
-                  { key: 'low', label: 'Bajo', color: 'text-red-600' },
-                ].map(f => (
-                  <button
-                    key={f.key}
-                    onClick={() => setBalanceFilter(f.key as BalanceFilter)}
-                    className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${balanceFilter === f.key
-                      ? 'bg-white dark:bg-slate-600 shadow-sm ' + f.color
-                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                      }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+            {/* Divider */}
+            <div className="w-px h-6 bg-slate-200 dark:bg-slate-600 hidden sm:block" />
 
+            {/* Saldo Filter */}
+            <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5 gap-0.5">
+              {[
+                { key: 'all', label: 'Todos' },
+                { key: 'high', label: '●', color: 'text-emerald-500', title: 'Alto' },
+                { key: 'medium', label: '●', color: 'text-amber-500', title: 'Medio' },
+                { key: 'low', label: '●', color: 'text-red-500', title: 'Bajo' },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setBalanceFilter(f.key as BalanceFilter)}
+                  title={f.title || f.label}
+                  className={`px-2 py-1 rounded text-[10px] font-black transition-all ${balanceFilter === f.key
+                    ? 'bg-white dark:bg-slate-600 shadow-sm ' + (f.color || 'text-slate-700 dark:text-white')
+                    : (f.color || 'text-slate-400') + ' hover:opacity-80'
+                    }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Filter Select */}
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+              className="px-2 py-1.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option value="all">📅 Todos</option>
+              <option value="thisMonth">Este Mes</option>
+              <option value="thisYear">Este Año</option>
+              <option value="noRecent">Sin Actividad</option>
+            </select>
+
+            {/* Sort Select */}
+            <select
+              value={`${sortField}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, order] = e.target.value.split('-');
+                setSortField(field as SortField);
+                setSortOrder(order as SortOrder);
+              }}
+              className="px-2 py-1.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option value="nombre-asc">A-Z</option>
+              <option value="nombre-desc">Z-A</option>
+              <option value="totalDecrees-desc">+ Decretos</option>
+              <option value="saldo-asc">- Saldo</option>
+              <option value="saldo-desc">+ Saldo</option>
+            </select>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1 ml-auto">
               <button
                 onClick={exportEmployeesToExcel}
-                className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all"
+                className="p-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all"
                 title="Exportar a Excel"
               >
-                <Download size={16} />
+                <Download size={14} />
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all"
+                title="Importar desde Excel"
+              >
+                <Upload size={14} />
               </button>
             </div>
-          </div>
-
-          {/* Sort Buttons */}
-          <div className="flex flex-wrap gap-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider self-center mr-2">Ordenar:</span>
-            {[
-              { field: 'nombre', label: 'Nombre' },
-              { field: 'totalDecrees', label: 'Decretos' },
-              { field: 'diasPA', label: 'Días PA' },
-              { field: 'diasFL', label: 'Días FL' },
-              { field: 'saldo', label: 'Saldo' },
-            ].map(s => (
-              <button
-                key={s.field}
-                onClick={() => handleSort(s.field as SortField)}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${sortField === s.field
-                  ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-              >
-                {s.label}
-                {sortField === s.field && (
-                  sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                )}
-              </button>
-            ))}
           </div>
         </div>
 
-        {/* Add Employee Form */}
+        {/* Add Employee Form - Compacto */}
         {showAddForm && (
-          <div className="p-4 sm:p-6 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800 flex-shrink-0">
-            <div className="flex items-center gap-2 mb-4">
-              <Plus size={16} className="text-emerald-600" />
-              <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-                Nuevo Funcionario
-              </span>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Plus size={14} className="text-emerald-600 flex-shrink-0" />
               <input
                 placeholder="Nombre completo"
                 value={newEmployee.nombre}
                 onChange={e => setNewEmployee({ ...newEmployee, nombre: e.target.value })}
-                className="flex-1 px-4 py-3 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+                className="flex-1 px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300"
               />
               <input
-                placeholder="RUT (ej: 12.345.678-9)"
+                placeholder="RUT"
                 value={newEmployee.rut}
                 onChange={e => setNewEmployee({ ...newEmployee, rut: e.target.value })}
-                className="flex-1 sm:max-w-[200px] px-4 py-3 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-xs font-bold tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500 font-mono"
+                className="w-36 px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-[11px] font-bold tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300 font-mono"
               />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAddEmployee}
-                  className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-lg"
-                >
-                  <CheckCircle size={14} className="inline mr-2" />
-                  Guardar
-                </button>
-                <button
-                  onClick={() => { setShowAddForm(false); setNewEmployee({ nombre: '', rut: '' }); }}
-                  className="px-4 py-3 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all"
-                >
-                  <XCircle size={14} />
-                </button>
-              </div>
+              <button
+                onClick={handleAddEmployee}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1"
+              >
+                <CheckCircle size={12} /> Guardar
+              </button>
+              <button
+                onClick={() => { setShowAddForm(false); setNewEmployee({ nombre: '', rut: '' }); }}
+                className="p-1.5 bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-300 transition-all"
+              >
+                <XCircle size={14} />
+              </button>
             </div>
           </div>
         )}
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6">
-          <div className="grid gap-2">
-            {filteredEmployees.map((emp, index) => {
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-2">
+          <div className="grid gap-1">
+            {paginatedEmployees.map((emp, index) => {
               const stats = employeeStats[emp.rut] || {
                 totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, diasHaber: 6, lastDecree: null, decrees: []
               };
               const isExpanded = expandedEmployee === emp.rut;
+              const isEditing = editingEmployee === emp.rut;
+              const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
 
               return (
                 <div key={emp.rut} className="group">
-                  {/* Main Row */}
+                  {/* Main Row - Compacto */}
                   <div
-                    className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all cursor-pointer ${isExpanded
-                      ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-2 ring-indigo-200 dark:ring-indigo-700'
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all cursor-pointer ${isExpanded
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200 dark:ring-indigo-700'
                       : 'bg-slate-50 dark:bg-slate-700/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
                       }`}
                     onClick={() => setExpandedEmployee(isExpanded ? null : emp.rut)}
                   >
-                    {/* Avatar */}
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shadow-sm transition-all ${isExpanded
+                    {/* Avatar pequeño */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isExpanded
                       ? 'bg-indigo-600 text-white'
-                      : 'bg-white dark:bg-slate-600 text-slate-300 dark:text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/50 group-hover:text-indigo-500'
+                      : 'bg-white dark:bg-slate-600 text-slate-300 dark:text-slate-400 group-hover:text-indigo-500'
                       }`}>
-                      <UserCircle size={24} />
+                      <UserCircle size={18} />
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs sm:text-sm font-black uppercase tracking-tight truncate transition-colors ${isExpanded ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-800 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-300'
-                        }`}>
+                      <p className={`text-[11px] font-black uppercase tracking-tight truncate ${isExpanded ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>
                         {emp.nombre}
                       </p>
-                      <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 font-mono tracking-tighter">
-                        RUT: {emp.rut}
+                      <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 font-mono">
+                        {emp.rut}
                       </p>
                     </div>
 
-                    {/* Stats Pills */}
-                    <div className="hidden md:flex items-center gap-2">
-                      <span className="px-2 py-1 bg-slate-100 dark:bg-slate-600 rounded-lg text-[10px] font-black text-slate-500 dark:text-slate-300">
-                        <FileText size={10} className="inline mr-1" />
+                    {/* Stats inline */}
+                    <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-bold">
+                      <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-600 rounded text-slate-500 dark:text-slate-300">
                         {stats.totalDecrees}
                       </span>
-                      <span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg text-[10px] font-black text-indigo-600 dark:text-indigo-400">
-                        PA: {stats.diasPA}
+                      <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/40 rounded text-indigo-600 dark:text-indigo-400">
+                        PA:{stats.diasPA}
                       </span>
-                      <span className="px-2 py-1 bg-amber-50 dark:bg-amber-900/40 rounded-lg text-[10px] font-black text-amber-600 dark:text-amber-400">
-                        FL: {stats.diasFL}
+                      <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/40 rounded text-amber-600 dark:text-amber-400">
+                        FL:{stats.diasFL}
                       </span>
                     </div>
 
-                    {/* Saldo Badge */}
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black ${getSaldoColor(stats.saldo)}`}>
+                    {/* Saldo */}
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black ${getSaldoColor(stats.saldo)}`}>
                       {getSaldoIcon(stats.saldo)}
                       <span>{stats.saldo.toFixed(1)}</span>
                     </div>
 
                     {/* Number */}
-                    <div className="text-[9px] sm:text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">
-                      #{(index + 1).toString().padStart(2, '0')}
-                    </div>
+                    <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 w-6 text-right">
+                      #{(globalIndex + 1).toString().padStart(2, '0')}
+                    </span>
 
-                    {/* Expand Icon */}
-                    <div className="text-slate-400">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </div>
+                    {/* Expand */}
+                    <ChevronDown size={14} className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
 
                   {/* Expanded Details */}
@@ -519,6 +689,63 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                         <div className={`rounded-lg p-3 ${getSaldoColor(stats.saldo)}`}>
                           <p className="text-[9px] font-bold opacity-70 uppercase tracking-wider mb-1">Saldo Disponible</p>
                           <p className="text-lg font-black">{stats.saldo.toFixed(1)} / {stats.diasHaber}</p>
+                        </div>
+                      </div>
+
+                      {/* Proyección y Mini Gráfico */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Mini Gráfico de Barras */}
+                        <div className="bg-slate-50 dark:bg-slate-600 rounded-lg p-3">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Uso por Tipo</p>
+                          <div className="flex items-end gap-2 h-16">
+                            <div className="flex flex-col items-center flex-1">
+                              <div
+                                className="w-full bg-indigo-500 rounded-t transition-all"
+                                style={{ height: `${Math.min(100, (stats.diasPA / Math.max(stats.diasPA + stats.diasFL, 1)) * 100)}%`, minHeight: stats.diasPA > 0 ? '8px' : '0' }}
+                              />
+                              <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 mt-1">PA</span>
+                              <span className="text-[10px] font-black text-slate-600 dark:text-slate-300">{stats.diasPA}</span>
+                            </div>
+                            <div className="flex flex-col items-center flex-1">
+                              <div
+                                className="w-full bg-amber-500 rounded-t transition-all"
+                                style={{ height: `${Math.min(100, (stats.diasFL / Math.max(stats.diasPA + stats.diasFL, 1)) * 100)}%`, minHeight: stats.diasFL > 0 ? '8px' : '0' }}
+                              />
+                              <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 mt-1">FL</span>
+                              <span className="text-[10px] font-black text-slate-600 dark:text-slate-300">{stats.diasFL}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Proyección de Agotamiento */}
+                        <div className="bg-slate-50 dark:bg-slate-600 rounded-lg p-3">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Proyección</p>
+                          {(() => {
+                            const rate = getMonthlyRate(stats);
+                            const exhaustion = getProjectedExhaustion(stats);
+                            return (
+                              <div className="space-y-1">
+                                <div className="flex justify-between">
+                                  <span className="text-[10px] text-slate-500">Uso mensual:</span>
+                                  <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">{rate.toFixed(1)} días/mes</span>
+                                </div>
+                                {exhaustion ? (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[10px] text-red-500">Agotamiento:</span>
+                                    <span className="text-[10px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
+                                      <AlertTriangle size={10} />
+                                      {exhaustion.toLocaleDateString('es-CL', { month: 'short', year: 'numeric' })}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-between">
+                                    <span className="text-[10px] text-emerald-500">Estado:</span>
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Saldo estable</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -570,6 +797,52 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                         </div>
                       )}
 
+                      {/* ★ Línea de Tiempo Anual */}
+                      {stats.decrees.length > 0 && (
+                        <div className="border-t border-slate-200 dark:border-slate-600 pt-4">
+                          <EmployeeTimeline records={stats.decrees} />
+                        </div>
+                      )}
+
+                      {/* Edit Form (inline) */}
+                      {isEditing && onUpdateEmployee && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 animate-in fade-in duration-200">
+                          <p className="text-xs font-bold text-blue-700 dark:text-blue-400 mb-3 flex items-center gap-2">
+                            <Edit3 size={12} /> Editar Funcionario
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <input
+                              placeholder="Nombre completo"
+                              value={editForm.nombre}
+                              onChange={e => setEditForm({ ...editForm, nombre: e.target.value })}
+                              onClick={e => e.stopPropagation()}
+                              className="flex-1 px-4 py-2 bg-white dark:bg-slate-700 border border-blue-200 dark:border-blue-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200"
+                            />
+                            <input
+                              placeholder="RUT"
+                              value={editForm.rut}
+                              onChange={e => setEditForm({ ...editForm, rut: e.target.value })}
+                              onClick={e => e.stopPropagation()}
+                              className="flex-1 sm:max-w-[160px] px-4 py-2 bg-white dark:bg-slate-700 border border-blue-200 dark:border-blue-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 text-xs font-bold tracking-wide text-slate-700 dark:text-slate-200 font-mono"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); saveEdit(emp.rut); }}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1"
+                              >
+                                <Save size={12} /> Guardar
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); cancelEdit(); }}
+                                className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-black uppercase tracking-wider"
+                              >
+                                <XCircle size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Actions */}
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-600">
                         {onQuickDecree && (
@@ -588,16 +861,27 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                             <Eye size={12} /> Ver Decretos
                           </button>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(emp.rut); }}
-                          className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ml-auto"
-                        >
-                          <Trash2 size={12} /> Eliminar
-                        </button>
+                        {onUpdateEmployee && !isEditing && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); startEdit(emp); }}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                          >
+                            <Edit3 size={12} /> Editar
+                          </button>
+                        )}
+                        {/* ★ Solo mostrar Eliminar si tiene permisos */}
+                        {onDeleteEmployee && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(emp.rut); }}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ml-auto"
+                          >
+                            <Trash2 size={12} /> Eliminar
+                          </button>
+                        )}
                       </div>
 
                       {/* Delete Confirmation */}
-                      {deleteConfirm === emp.rut && (
+                      {deleteConfirm === emp.rut && onDeleteEmployee && (
                         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 animate-in fade-in duration-200">
                           <p className="text-xs font-bold text-red-700 dark:text-red-400 mb-3">
                             ¿Eliminar a {emp.nombre}? Esta acción no se puede deshacer.
@@ -635,18 +919,95 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer with Pagination */}
         <div className="p-4 sm:p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex-shrink-0">
           <div className="flex items-center justify-between">
             <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-              Mostrando {filteredEmployees.length} de {employees.length} funcionarios
+              Mostrando {paginatedEmployees.length} de {filteredEmployees.length} funcionarios
+              {filteredEmployees.length !== employees.length && ` (${employees.length} total)`}
             </p>
-            <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-600 transition-all"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-[10px] font-black text-slate-600 dark:text-slate-300 px-3">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-600 transition-all"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+
+            <p className="text-[9px] sm:text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest hidden sm:block">
               Clic para expandir detalles
             </p>
           </div>
         </div>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="absolute inset-0 z-[160] flex items-center justify-center p-4" onClick={() => setShowImportModal(false)}>
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+              <div className="flex items-center gap-3">
+                <Upload size={24} />
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">Importar Funcionarios</h3>
+                  <p className="text-[10px] font-bold opacity-70">{importData.length} nuevos funcionarios detectados</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 max-h-64 overflow-y-auto custom-scrollbar">
+              {importData.length === 0 ? (
+                <p className="text-center text-slate-400 text-sm py-4">No se encontraron nuevos funcionarios para importar</p>
+              ) : (
+                <div className="space-y-2">
+                  {importData.slice(0, 20).map((emp, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                      <span className="text-xs font-bold text-slate-700 dark:text-white truncate flex-1">{emp.nombre}</span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-2">{emp.rut}</span>
+                    </div>
+                  ))}
+                  {importData.length > 20 && (
+                    <p className="text-center text-[10px] text-slate-400">...y {importData.length - 20} más</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowImportModal(false); setImportData([]); }}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[11px] font-black uppercase tracking-wider"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={processImport}
+                disabled={importData.length === 0}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-2"
+              >
+                <CheckCircle size={14} /> Importar Todos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

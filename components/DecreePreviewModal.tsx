@@ -13,7 +13,11 @@ interface DecreePreviewModalProps {
 const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose, record, onConfirm }) => {
     if (!isOpen || !record) return null;
 
-    const saldoFinal = (record.diasHaber - record.cantidadDias).toFixed(1);
+    // Para FL, el saldo final es el Saldo Final del Periodo 2 (o P1 si no hay P2)
+    // Para PA, es la resta simple de diasHaber - cantidadDias
+    const saldoFinal = record.solicitudType === 'FL'
+        ? (record.saldoFinalP2 || record.saldoFinalP1 || 0).toFixed(1)
+        : (record.diasHaber - record.cantidadDias).toFixed(1);
     const nombreProperCase = toProperCase(record.funcionario);
 
     return (

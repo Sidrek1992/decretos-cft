@@ -1,17 +1,104 @@
 /**
- * SGP CLOUD - MOTOR UNIFICADO v4.1 (Versión Estable)
- * Soporta: Lectura de Datos, Sincronización y Generación de PDFs/Documentos.
- * Corregido: Error de permisos Drive (migrado a standard DriveApp).
+ * SGP CLOUD - MOTOR UNIFICADO v5.0 (Con Validaciones y Soporte IA)
+ * Soporta: Lectura de Datos, Sincronización, Generación de PDFs/Documentos y Procesamiento IA.
+ * Mejoras: Validación de RUT y fechas en backend, procesamiento de PDFs con Gemini.
  */
 
 const TEMPLATE_DOC_ID = '1BvJanZb0936sPvV0oEZw-E0sro_02ibm_BFQuXa6F24';
 const FOLDER_DESTINATION_ID = '1sX722eJuMnnrhqPO-zJF9ccCqlktLDo8';
 const DEFAULT_SHEET_ID = '1BmMABAHk8ZgpUlXzsyI33qQGtsk5mrKnf5qzgQp4US0';
 
+// Configuración de Gemini - Añadir la API key en las propiedades del script
+// PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', 'tu-api-key');
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
 /**
+ * ============================================
+ * FUNCIONES DE VALIDACIÓN
+ * ============================================
+ */
+
+/**
+ * Valida un RUT chileno
+ * @param {string} rut - RUT a validar (con o sin puntos y guión)
+ * @returns {boolean} - true si es válido
+ */
+function validateRut(rut) {
+  if (!rut || rut.length < 8) return false;
+
+  var cleanRut = rut.replace(/\./g, '').replace(/-/g, '').toUpperCase();
+  var body = cleanRut.slice(0, -1);
+  var dv = cleanRut.slice(-1);
+
+  if (!/^\d+$/.test(body)) return false;
+
+  var sum = 0;
+  var multiplier = 2;
+
+  for (var i = body.length - 1; i >= 0; i--) {
+    sum += parseInt(body[i]) * multiplier;
+    multiplier = multiplier === 7 ? 2 : multiplier + 1;
+  }
+
+  var expectedDv = 11 - (sum % 11);
+  var calculatedDv = expectedDv === 11 ? '0' : expectedDv === 10 ? 'K' : expectedDv.toString();
+
+  return dv === calculatedDv;
+}
+
+/**
+ * Valida que una fecha esté en el rango permitido
+ * @param {string} dateString - Fecha en formato YYYY-MM-DD
+ * @returns {boolean} - true si es válida
+ */
+function validateDate(dateString) {
+  if (!dateString) return false;
+  var date = new Date(dateString);
+  if (isNaN(date.getTime())) return false;
+  var year = date.getFullYear();
+  return year >= 2020 && year <= 2030;
+}
+
+/**
+ * Valida los datos de un registro antes de guardarlo
+ * @param {object} record - Registro a validar
+ * @returns {object} - { valid: boolean, errors: string[] }
+ */
+function validateRecord(record) {
+  var errors = [];
+
+  if (!record.funcionario || record.funcionario.trim() === '') {
+    errors.push('Funcionario es requerido');
+  }
+
+  if (!record.rut || !validateRut(record.rut)) {
+    errors.push('RUT inválido');
+  }
+
+  if (!record.fechaInicio || !validateDate(record.fechaInicio)) {
+    errors.push('Fecha de inicio inválida');
+  }
+
+  if (record.solicitudType === 'FL') {
+    if (!record.fechaTermino || !validateDate(record.fechaTermino)) {
+      errors.push('Fecha de término es requerida para Feriado Legal');
+    }
+  }
+
+  if (!record.cantidadDias || record.cantidadDias <= 0 || record.cantidadDias > 30) {
+    errors.push('Cantidad de días debe estar entre 1 y 30');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors: errors
+  };
+}
+
+/**
+ * ============================================
  * LECTURA DE DATOS (doGet)
- * Lee los datos desde la fila 2 (la fila 1 es encabezado)
- * Soporta tanto el sheet de decretos (15 cols) como el de empleados (5 cols)
+ * ============================================
  */
 function doGet(e) {
   try {
@@ -53,16 +140,31 @@ function doGet(e) {
   }
 }
 
+/**
+ * ============================================
+ * ESCRITURA DE DATOS (doPost)
+ * ============================================
+ */
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents);
-    if (payload.sheetId) return handleSpreadsheetSync(payload);
+    
+    // Procesar según el tipo de acción
+    if (payload.action === 'processAI') {
+      return handleAIProcessing(payload);
+    }
+    if (payload.sheetId) {
+      return handleSpreadsheetSync(payload);
+    }
     return handleDocumentCreation(payload);
   } catch (err) {
     return createJsonResponse({ success: false, error: "Error POST: " + err.toString() });
   }
 }
 
+/**
+ * Sincronización con Google Sheets
+ */
 function handleSpreadsheetSync(payload) {
   var lock = LockService.getScriptLock();
   try {
@@ -75,6 +177,34 @@ function handleSpreadsheetSync(payload) {
     var isEmployees = payload.type === 'employees';
     var lastCol = sheet.getLastColumn();
     var numCols = isEmployees ? 5 : Math.max(lastCol, payload.data && payload.data[0] ? payload.data[0].length : lastCol);
+
+    // Validar registros si no son empleados
+    if (!isEmployees && payload.validateRecords) {
+      var validationErrors = [];
+      payload.data.forEach(function(row, index) {
+        var record = {
+          funcionario: row[4],
+          rut: row[5],
+          fechaInicio: row[8],
+          fechaTermino: row[16],
+          cantidadDias: row[7],
+          solicitudType: row[1] === 'PA' ? 'PA' : 'FL'
+        };
+        var validation = validateRecord(record);
+        if (!validation.valid) {
+          validationErrors.push('Fila ' + (index + 2) + ': ' + validation.errors.join(', '));
+        }
+      });
+      
+      if (validationErrors.length > 0) {
+        lock.releaseLock();
+        return createJsonResponse({ 
+          success: false, 
+          error: 'Errores de validación', 
+          validationErrors: validationErrors 
+        });
+      }
+    }
 
     // Limpiar datos desde fila 2 (preservar encabezado en fila 1)
     if (lastRow >= 2) {
@@ -95,6 +225,9 @@ function handleSpreadsheetSync(payload) {
   }
 }
 
+/**
+ * Creación de documentos
+ */
 function handleDocumentCreation(data) {
   try {
     // Usar plantilla específica si se envía en el payload, sino la por defecto
@@ -146,14 +279,164 @@ function handleDocumentCreation(data) {
   }
 }
 
+/**
+ * ============================================
+ * PROCESAMIENTO IA CON GEMINI
+ * ============================================
+ */
+
+/**
+ * Procesa un PDF con Gemini para extraer datos estructurados
+ */
+function handleAIProcessing(payload) {
+  try {
+    var apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey) {
+      return createJsonResponse({ 
+        success: false, 
+        error: 'API Key de Gemini no configurada. Ejecuta configurarApiKey() primero.' 
+      });
+    }
+
+    var pdfBase64 = payload.pdfBase64;
+    var solicitudType = payload.solicitudType || 'PA';
+
+    var prompt = solicitudType === 'PA' 
+      ? getPromptPA() 
+      : getPromptFL();
+
+    var requestBody = {
+      contents: [{
+        parts: [
+          {
+            inline_data: {
+              mime_type: 'application/pdf',
+              data: pdfBase64
+            }
+          },
+          {
+            text: prompt
+          }
+        ]
+      }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    };
+
+    var response = UrlFetchApp.fetch(GEMINI_API_URL + '?key=' + apiKey, {
+      method: 'POST',
+      contentType: 'application/json',
+      payload: JSON.stringify(requestBody),
+      muteHttpExceptions: true
+    });
+
+    var result = JSON.parse(response.getContentText());
+    
+    if (result.error) {
+      return createJsonResponse({ 
+        success: false, 
+        error: 'Error de Gemini: ' + result.error.message 
+      });
+    }
+
+    var extractedText = result.candidates[0].content.parts[0].text;
+    var extractedData = JSON.parse(extractedText);
+
+    // Validar RUT extraído
+    if (extractedData.rut && !validateRut(extractedData.rut)) {
+      extractedData.rutWarning = 'RUT extraído podría ser inválido';
+    }
+
+    return createJsonResponse({
+      success: true,
+      data: extractedData
+    });
+
+  } catch (e) {
+    return createJsonResponse({ 
+      success: false, 
+      error: 'Error procesando IA: ' + e.toString() 
+    });
+  }
+}
+
+/**
+ * Prompt para extracción de Permisos Administrativos
+ */
+function getPromptPA() {
+  return `Actúa como un experto administrativo. Analiza esta SOLICITUD DE PERMISO ADMINISTRATIVO. 
+Extrae con precisión los siguientes campos del documento:
+- funcionario: Nombre completo del solicitante.
+- rut: RUT del solicitante (con puntos y guion).
+- solicitudType: 'PA' para Permiso Administrativo.
+- cantidadDias: Número de días solicitados (ej. 1, 0.5, 3).
+- fechaInicio: Fecha de inicio del permiso en formato YYYY-MM-DD.
+- tipoJornada: Identifica si es 'Jornada completa', 'Jornada mañana', o 'Jornada tarde'.
+- fechaDecreto: Fecha de la solicitud que aparece en la parte superior del documento, en formato YYYY-MM-DD.
+
+Responde estrictamente en formato JSON con estas propiedades.`;
+}
+
+/**
+ * Prompt para extracción de Feriado Legal
+ */
+function getPromptFL() {
+  return `Actúa como un experto administrativo. Analiza este FORMULARIO DE SOLICITUD DE FERIADO LEGAL.
+Extrae con precisión los siguientes campos del documento:
+- funcionario: Nombre completo del solicitante.
+- rut: RUT del solicitante (con puntos y guion).
+- periodo: El período al que corresponde el feriado (ej: "2024-2025").
+- saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud.
+- solicitado: Cantidad de días solicitados en este formulario.
+- cantidadDias: Total de días solicitados (igual que solicitado).
+- fechaInicio: Fecha de inicio del feriado en formato YYYY-MM-DD.
+- fechaTermino: Fecha de término del feriado en formato YYYY-MM-DD.
+- fechaDecreto: Fecha de la solicitud que aparece en la parte superior del documento, en formato YYYY-MM-DD.
+
+Responde estrictamente en formato JSON con estas propiedades.`;
+}
+
+/**
+ * ============================================
+ * UTILIDADES
+ * ============================================
+ */
+
 function createJsonResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
+ * Configura la API Key de Gemini en las propiedades del script
+ * Ejecutar esta función manualmente desde el editor de Apps Script
+ * @param {string} apiKey - La API key de Gemini
+ */
+function configurarApiKey(apiKey) {
+  if (!apiKey) {
+    Logger.log('Error: Debes proporcionar una API key');
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', apiKey);
+  Logger.log('✅ API Key configurada exitosamente');
+}
+
+/**
+ * Verifica si la API Key está configurada
+ */
+function verificarApiKey() {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (apiKey) {
+    Logger.log('✅ API Key configurada: ' + apiKey.substring(0, 8) + '...');
+    return true;
+  }
+  Logger.log('❌ API Key NO configurada');
+  return false;
+}
+
+/**
  * IMPORTANTE: Ejecuta esta función una vez en el editor de Apps Script 
  * para autorizar los permisos de Drive y DocumentApp.
- * Incluye makeCopy para forzar el scope completo de Drive.
  */
 function AUTORIZAR_CON_UN_CLIC() {
   // Forzar autorización de lectura
@@ -166,6 +449,9 @@ function AUTORIZAR_CON_UN_CLIC() {
   
   // Forzar autorización de DocumentApp
   DocumentApp.openById(TEMPLATE_DOC_ID);
+  
+  // Verificar API Key
+  verificarApiKey();
   
   Logger.log("✅ Autorización completa (lectura, copia y documentos) exitosa");
 }

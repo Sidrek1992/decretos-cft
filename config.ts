@@ -19,8 +19,11 @@ export const CONFIG = {
     // ID de la hoja de cálculo de decretos (PA)
     DECRETOS_SHEET_ID: import.meta.env.VITE_DECRETOS_SHEET_ID || '1BmMABAHk8ZgpUlXzsyI33qQGtsk5mrKnf5qzgQp4US0',
 
-    // ID de la hoja de cálculo de feriados (FL)
+    // ID de la hoja de cálculo de feriados 1 período (FL)
     FERIADOS_SHEET_ID: import.meta.env.VITE_FERIADOS_SHEET_ID || '1dSZ7v5WwP1w1WpwfP3hdWiTCF3pf2niXLKDK7GWIz0I',
+
+    // ID de la hoja de cálculo de feriados 2 períodos (FL_2P)
+    FERIADOS_2P_SHEET_ID: import.meta.env.VITE_FERIADOS_2P_SHEET_ID || '1dSZ7v5WwP1w1WpwfP3hdWiTCF3pf2niXLKDK7GWIz0I',
 
     // ID de la hoja de cálculo de funcionarios
     EMPLOYEES_SHEET_ID: import.meta.env.VITE_EMPLOYEES_SHEET_ID || '14qgHA7YP4qoSbzD8rgMPW6OmqLIVFi8V-1VPxoUEDbI',

@@ -4,8 +4,8 @@ import { PermitRecord } from '../types';
 
 interface ActionMenuProps {
     record: PermitRecord;
-    onEdit: (record: PermitRecord) => void;
-    onDelete: (id: string) => void;
+    onEdit?: (record: PermitRecord) => void;  // ★ Ahora opcional
+    onDelete?: (id: string) => void;           // ★ Ahora opcional
     onGeneratePDF: (record: PermitRecord, forcePdf: boolean) => void;
     onPreview?: (record: PermitRecord) => void;
 }
@@ -46,21 +46,23 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ record, onEdit, onDelete, onGen
             color: 'text-sky-600 dark:text-sky-400',
             bg: 'hover:bg-sky-50 dark:hover:bg-sky-900/30'
         },
-        {
+        // ★ Solo mostrar Modificar si onEdit está definido
+        ...(onEdit ? [{
             icon: Edit2,
             label: 'Modificar',
             onClick: () => onEdit(record),
             color: 'text-amber-600 dark:text-amber-400',
             bg: 'hover:bg-amber-50 dark:hover:bg-amber-900/30'
-        },
-        {
+        }] : []),
+        // ★ Solo mostrar Eliminar si onDelete está definido
+        ...(onDelete ? [{
             icon: Trash,
             label: 'Eliminar',
             onClick: () => onDelete(record.id),
             color: 'text-red-600 dark:text-red-400',
             bg: 'hover:bg-red-50 dark:hover:bg-red-900/30',
             divider: true
-        }
+        }] : [])
     ];
 
     return (

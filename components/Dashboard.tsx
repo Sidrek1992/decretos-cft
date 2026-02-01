@@ -1,11 +1,12 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { PermitRecord } from '../types';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
-import { TrendingUp, Users, Calendar, AlertTriangle, ChevronRight } from 'lucide-react';
+import { TrendingUp, Users, Calendar, AlertTriangle, ChevronRight, FileDown, Loader2 } from 'lucide-react';
+import { exportDashboardToPDF } from '../services/batchPdfGenerator';
 
 interface DashboardProps {
     records: PermitRecord[];
@@ -22,10 +23,34 @@ const COLORS = {
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBalance }) => {
-    // Datos por mes
-    const monthlyData = useMemo(() => {
-        const months: Record<string, { PA: number; FL: number; total: number }> = {};
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Función para exportar el dashboard a PDF
+    const handleExportPDF = async () => {
+        setIsExporting(true);
+        try {
+            await exportDashboardToPDF('dashboard-content', 'Reporte GDP Cloud - Dashboard Analytics');
+        } catch (error) {
+            console.error('Error al exportar Dashboard:', error);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    // Consolidar todos los cálculos en un solo useMemo para evitar múltiples pasadas
+    const dashboardStats = useMemo(() => {
         const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+        // Inicializar estructuras
+        const months: Record<string, { PA: number; FL: number; total: number }> = {};
+        const byEmployee: Record<string, { nombre: string; dias: number }> = {};
+        const balanceByEmployee: Record<string, { nombre: string; rut: string; saldo: number; tipo: string }> = {};
+        const uniqueRuts = new Set<string>();
+        const seenByType: Record<string, Set<string>> = { PA: new Set(), FL: new Set() };
+
+        let paCount = 0;
+        let flCount = 0;
+        let totalDays = 0;
 
         // Inicializar últimos 6 meses
         const now = new Date();
@@ -35,88 +60,83 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
             months[key] = { PA: 0, FL: 0, total: 0 };
         }
 
-        records.forEach(r => {
-            if (!r.fechaInicio) return;
-            const date = new Date(r.fechaInicio);
-            const key = `${monthNames[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
-            if (months[key]) {
-                months[key][r.solicitudType] += r.cantidadDias;
-                months[key].total += r.cantidadDias;
-            }
-        });
+        // Ordenar registros por fecha de creación (más recientes primero) para saldo bajo
+        const sortedRecords = [...records].sort((a, b) => b.createdAt - a.createdAt);
 
-        return Object.entries(months).map(([name, data]) => ({ name, ...data }));
-    }, [records]);
+        // Una sola pasada por todos los registros
+        sortedRecords.forEach(r => {
+            // Conteo por tipo
+            if (r.solicitudType === 'PA') paCount++;
+            else flCount++;
 
-    // Distribución por tipo
-    const typeDistribution = useMemo(() => {
-        const pa = records.filter(r => r.solicitudType === 'PA').length;
-        const fl = records.filter(r => r.solicitudType === 'FL').length;
-        return [
-            { name: 'Permisos Admin.', value: pa, color: COLORS.PA },
-            { name: 'Feriados Legales', value: fl, color: COLORS.FL }
-        ];
-    }, [records]);
+            // Total de días
+            totalDays += r.cantidadDias;
 
-    // Top 5 funcionarios con más días solicitados
-    const topFuncionarios = useMemo(() => {
-        const byEmployee: Record<string, { nombre: string; dias: number }> = {};
+            // Empleados únicos
+            uniqueRuts.add(r.rut);
 
-        records.forEach(r => {
+            // Acumulado por empleado (top funcionarios)
             if (!byEmployee[r.rut]) {
                 byEmployee[r.rut] = { nombre: r.funcionario, dias: 0 };
             }
             byEmployee[r.rut].dias += r.cantidadDias;
-        });
 
-        return Object.values(byEmployee)
-            .sort((a, b) => b.dias - a.dias)
-            .slice(0, 5);
-    }, [records]);
-
-    // Funcionarios con saldo bajo (menos de 2 días)
-    const lowBalanceEmployees = useMemo(() => {
-        const balanceByEmployee: Record<string, { nombre: string; rut: string; saldo: number; tipo: string }> = {};
-
-        // Procesar cada tipo por separado
-        ['PA', 'FL'].forEach(tipo => {
-            const tipoRecords = records
-                .filter(r => r.solicitudType === tipo)
-                .sort((a, b) => b.createdAt - a.createdAt);
-
-            const seen = new Set<string>();
-            tipoRecords.forEach(r => {
-                if (!seen.has(r.rut)) {
-                    const saldo = r.diasHaber - r.cantidadDias;
-                    const key = `${r.rut}-${tipo}`;
-                    if (saldo < 2) {
-                        balanceByEmployee[key] = {
-                            nombre: r.funcionario,
-                            rut: r.rut,
-                            saldo,
-                            tipo
-                        };
-                    }
-                    seen.add(r.rut);
+            // Datos mensuales
+            if (r.fechaInicio) {
+                const date = new Date(r.fechaInicio);
+                const key = `${monthNames[date.getMonth()]} ${date.getFullYear().toString().slice(-2)}`;
+                if (months[key]) {
+                    months[key][r.solicitudType] += r.cantidadDias;
+                    months[key].total += r.cantidadDias;
                 }
-            });
+            }
+
+            // Saldo bajo (solo el registro más reciente por RUT y tipo)
+            const tipo = r.solicitudType;
+            if (!seenByType[tipo].has(r.rut)) {
+                const saldo = r.diasHaber - r.cantidadDias;
+                if (saldo < 2) {
+                    const key = `${r.rut}-${tipo}`;
+                    balanceByEmployee[key] = {
+                        nombre: r.funcionario,
+                        rut: r.rut,
+                        saldo,
+                        tipo
+                    };
+                }
+                seenByType[tipo].add(r.rut);
+            }
         });
 
-        return Object.values(balanceByEmployee).sort((a, b) => a.saldo - b.saldo);
+        return {
+            monthlyData: Object.entries(months).map(([name, data]) => ({ name, ...data })),
+            typeDistribution: [
+                { name: 'Permisos Admin.', value: paCount, color: COLORS.PA },
+                { name: 'Feriados Legales', value: flCount, color: COLORS.FL }
+            ],
+            topFuncionarios: Object.values(byEmployee)
+                .sort((a, b) => b.dias - a.dias)
+                .slice(0, 5),
+            lowBalanceEmployees: Object.values(balanceByEmployee).sort((a, b) => a.saldo - b.saldo),
+            averageDaysPerRequest: records.length === 0 ? '0' : (totalDays / records.length).toFixed(1),
+            activeEmployees: uniqueRuts.size,
+            totalDays
+        };
     }, [records]);
 
-    // Promedios
-    const averageDaysPerRequest = useMemo(() => {
-        if (records.length === 0) return 0;
-        return (records.reduce((acc, r) => acc + r.cantidadDias, 0) / records.length).toFixed(1);
-    }, [records]);
-
-    const activeEmployees = useMemo(() => {
-        return new Set(records.map(r => r.rut)).size;
-    }, [records]);
+    // Desestructurar para uso más limpio
+    const {
+        monthlyData,
+        typeDistribution,
+        topFuncionarios,
+        lowBalanceEmployees,
+        averageDaysPerRequest,
+        activeEmployees,
+        totalDays
+    } = dashboardStats;
 
     return (
-        <div className="space-y-6">
+        <div id="dashboard-content" className="space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -130,6 +150,24 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                         </p>
                     </div>
                 </div>
+                {/* ★ Botón de Exportar PDF */}
+                <button
+                    onClick={handleExportPDF}
+                    disabled={isExporting}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-black transition-colors shadow-lg"
+                >
+                    {isExporting ? (
+                        <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Exportando...
+                        </>
+                    ) : (
+                        <>
+                            <FileDown size={16} />
+                            Exportar PDF
+                        </>
+                    )}
+                </button>
             </div>
 
             {/* KPIs Row */}
@@ -151,14 +189,14 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                         Total días otorgados
                     </p>
                     <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                        {records.reduce((acc, r) => acc + r.cantidadDias, 0)}
+                        {totalDays}
                     </p>
                 </div>
                 <button
                     onClick={onViewLowBalance}
                     className={`bg-white dark:bg-slate-800 rounded-2xl p-4 border text-left transition-all hover:shadow-md group ${lowBalanceEmployees.length > 0
-                            ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20'
-                            : 'border-slate-200 dark:border-slate-700'
+                        ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20'
+                        : 'border-slate-200 dark:border-slate-700'
                         }`}
                 >
                     <div className="flex items-center justify-between">

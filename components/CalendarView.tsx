@@ -22,18 +22,36 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records })
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = new Date(year, month, 1).getDay();
 
-    // Agrupar decretos por día
+    // Agrupar decretos por día - expandir a todos los días que cubre cada permiso
     const decreesByDay = useMemo(() => {
-        const grouped: Record<number, PermitRecord[]> = {};
+        const grouped: Record<number, { record: PermitRecord; isStart: boolean; isEnd: boolean; dayNumber: number }[]> = {};
+
         records.forEach(r => {
             if (!r.fechaInicio) return;
-            const date = new Date(r.fechaInicio + 'T12:00:00');
-            if (date.getFullYear() === year && date.getMonth() === month) {
-                const day = date.getDate();
-                if (!grouped[day]) grouped[day] = [];
-                grouped[day].push(r);
+
+            const startDate = new Date(r.fechaInicio + 'T12:00:00');
+            // Calcular días reales (media jornada = 0.5 días, pero sigue siendo 1 día de calendario)
+            const calendarDays = Math.ceil(r.cantidadDias || 1);
+
+            // Expandir a todos los días del rango
+            for (let i = 0; i < calendarDays; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+
+                // Solo incluir si está en el mes/año actual
+                if (currentDate.getFullYear() === year && currentDate.getMonth() === month) {
+                    const day = currentDate.getDate();
+                    if (!grouped[day]) grouped[day] = [];
+                    grouped[day].push({
+                        record: r,
+                        isStart: i === 0,
+                        isEnd: i === calendarDays - 1,
+                        dayNumber: i + 1
+                    });
+                }
             }
         });
+
         return grouped;
     }, [records, year, month]);
 
@@ -121,26 +139,32 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records })
                                     key={day}
                                     onClick={() => hasRecords && setSelectedDay(selectedDay === day ? null : day)}
                                     className={`h-24 p-2 rounded-lg border transition-all cursor-pointer ${isToday(day)
-                                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
-                                            : weekend
-                                                ? 'border-transparent bg-red-50/50 dark:bg-red-900/10'
-                                                : 'border-transparent bg-slate-50 dark:bg-slate-800/50'
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                                        : weekend
+                                            ? 'border-transparent bg-red-50/50 dark:bg-red-900/10'
+                                            : 'border-transparent bg-slate-50 dark:bg-slate-800/50'
                                         } ${hasRecords ? 'hover:border-indigo-300 hover:shadow-md' : ''} ${selectedDay === day ? 'ring-2 ring-indigo-500' : ''
                                         }`}
                                 >
                                     <div className={`text-sm font-bold ${isToday(day) ? 'text-indigo-600 dark:text-indigo-400' :
-                                            weekend ? 'text-red-400' : 'text-slate-700 dark:text-slate-300'
+                                        weekend ? 'text-red-400' : 'text-slate-700 dark:text-slate-300'
                                         }`}>
                                         {day}
                                     </div>
                                     {hasRecords && (
                                         <div className="mt-1 space-y-0.5">
-                                            {dayRecords.slice(0, 2).map((r, idx) => (
-                                                <div key={idx} className={`text-[9px] px-1.5 py-0.5 rounded truncate font-medium ${r.solicitudType === 'PA'
-                                                        ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
-                                                        : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                                            {dayRecords.slice(0, 2).map((entry, idx) => (
+                                                <div key={idx} className={`text-[9px] px-1.5 py-0.5 rounded truncate font-medium flex items-center gap-1 ${entry.record.solicitudType === 'PA'
+                                                    ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
+                                                    : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
                                                     }`}>
-                                                    {r.funcionario.split(' ')[0]}
+                                                    {!entry.isStart && <span className="opacity-60">→</span>}
+                                                    {entry.record.funcionario.split(' ')[0]}
+                                                    {entry.record.cantidadDias > 1 && (
+                                                        <span className="opacity-60 text-[7px]">
+                                                            {entry.dayNumber}/{Math.ceil(entry.record.cantidadDias)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             ))}
                                             {dayRecords.length > 2 && (
@@ -164,17 +188,24 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records })
                             Permisos del {selectedDay} de {monthNames[month]}
                         </h4>
                         <div className="space-y-2 max-h-32 overflow-y-auto">
-                            {decreesByDay[selectedDay].map((r, idx) => (
+                            {decreesByDay[selectedDay].map((entry, idx) => (
                                 <div key={idx} className="flex items-center justify-between bg-white dark:bg-slate-700 p-3 rounded-xl shadow-sm">
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{r.funcionario}</p>
-                                        <p className="text-xs text-slate-500">{r.acto} • {r.cantidadDias} día(s) • {r.tipoJornada}</p>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-bold text-slate-900 dark:text-white">{entry.record.funcionario}</p>
+                                            {!entry.isStart && (
+                                                <span className="text-[9px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-600 rounded text-slate-500 dark:text-slate-400">
+                                                    Día {entry.dayNumber} de {Math.ceil(entry.record.cantidadDias)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-500">{entry.record.acto} • {entry.record.cantidadDias} día(s) • {entry.record.tipoJornada}</p>
                                     </div>
-                                    <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${r.solicitudType === 'PA'
-                                            ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
-                                            : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
+                                    <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${entry.record.solicitudType === 'PA'
+                                        ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
+                                        : 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300'
                                         }`}>
-                                        {r.solicitudType}
+                                        {entry.record.solicitudType}
                                     </span>
                                 </div>
                             ))}

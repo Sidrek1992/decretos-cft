@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Employee } from '../types';
 import { CONFIG } from '../config';
+import { logger } from '../utils/logger';
+
+const employeeLogger = logger.create('EmployeeSync');
 
 interface UseEmployeeSyncReturn {
     employees: Employee[];
@@ -11,6 +14,7 @@ interface UseEmployeeSyncReturn {
     fetchEmployeesFromCloud: () => Promise<void>;
     syncEmployeesToCloud: (data: Employee[]) => Promise<boolean>;
     addEmployee: (employee: Employee) => void;
+    updateEmployee: (oldRut: string, updatedEmployee: Employee) => void;
     deleteEmployee: (rut: string) => void;
 }
 
@@ -24,23 +28,40 @@ export const useEmployeeSync = (
     const [syncError, setSyncError] = useState(false);
     const [lastSync, setLastSync] = useState<Date | null>(null);
 
-
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     // Cargar empleados desde el Sheet al iniciar
     useEffect(() => {
         fetchEmployeesFromCloud();
+
+        // Cleanup: cancelar fetch pendiente al desmontar
+        return () => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
     }, []);
 
     const fetchEmployeesFromCloud = useCallback(async () => {
         if (!navigator.onLine) return;
 
+        // Cancelar fetch anterior si existe
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
+        const { signal } = abortControllerRef.current;
+
         setIsSyncing(true);
         setSyncError(false);
 
         try {
+            employeeLogger.info('Iniciando fetch de empleados...');
+
             // Usar el mismo Web App URL pero con el sheet de empleados
             const response = await fetch(
-                `${CONFIG.WEB_APP_URL}?sheetId=${CONFIG.EMPLOYEES_SHEET_ID}&type=employees`
+                `${CONFIG.WEB_APP_URL}?sheetId=${CONFIG.EMPLOYEES_SHEET_ID}&type=employees`,
+                { signal }
             );
             const result = await response.json();
 
@@ -72,10 +93,16 @@ export const useEmployeeSync = (
                 cloudEmployees.sort((a, b) => a.nombre.localeCompare(b.nombre));
                 setEmployees(cloudEmployees);
                 setLastSync(new Date());
+                employeeLogger.info(`Fetch completado: ${cloudEmployees.length} empleados`);
                 onSyncSuccess?.();
             }
         } catch (e) {
-            console.error("Error al recuperar empleados de la nube:", e);
+            // Ignorar errores de abort (son intencionales)
+            if (e instanceof Error && e.name === 'AbortError') {
+                employeeLogger.debug('Fetch cancelado (componente desmontado)');
+                return;
+            }
+            employeeLogger.error("Error al recuperar empleados de la nube:", e);
             setSyncError(true);
             onSyncError?.("Error al conectar con la nube de empleados");
         } finally {
@@ -152,7 +179,7 @@ export const useEmployeeSync = (
                 throw new Error(result.error);
             }
         } catch (e) {
-            console.error("Error sincronizando empleados:", e);
+            employeeLogger.error("Error sincronizando empleados:", e);
             setSyncError(true);
             onSyncError?.("Error al sincronizar empleados con la nube");
             return false;
@@ -164,6 +191,17 @@ export const useEmployeeSync = (
     const addEmployee = useCallback((employee: Employee) => {
         setEmployees(prev => {
             const updated = [...prev, employee].sort((a, b) => a.nombre.localeCompare(b.nombre));
+            // Sincronizar en segundo plano
+            syncEmployeesToCloud(updated);
+            return updated;
+        });
+    }, [syncEmployeesToCloud]);
+
+    const updateEmployee = useCallback((oldRut: string, updatedEmployee: Employee) => {
+        setEmployees(prev => {
+            const updated = prev.map(e =>
+                e.rut === oldRut ? updatedEmployee : e
+            ).sort((a, b) => a.nombre.localeCompare(b.nombre));
             // Sincronizar en segundo plano
             syncEmployeesToCloud(updated);
             return updated;
@@ -188,6 +226,7 @@ export const useEmployeeSync = (
         fetchEmployeesFromCloud,
         syncEmployeesToCloud,
         addEmployee,
+        updateEmployee,
         deleteEmployee
     };
 };

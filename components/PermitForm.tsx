@@ -102,9 +102,9 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
       setErrors({});
     } else {
       // Usar el correlativo correspondiente al tipo de solicitud actual
-      setFormData(prev => ({ 
-        ...prev, 
-        acto: nextCorrelatives[prev.solicitudType as 'PA' | 'FL'] 
+      setFormData(prev => ({
+        ...prev,
+        acto: nextCorrelatives[prev.solicitudType as 'PA' | 'FL']
       }));
     }
   }, [editingRecord, nextCorrelatives]);
@@ -185,8 +185,11 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
       // PA: un solo archivo
       if (formData.solicitudType === 'PA') {
         const base64 = await readFileAsBase64(files[0]);
-        const data = await extractDataFromPdf(base64);
-        if (Object.keys(data).length === 0) throw new Error("No se pudo extraer información del PDF.");
+        const result = await extractDataFromPdf(base64);
+        if (!result.success || !result.data) {
+          throw new Error(result.error || "No se pudo extraer información del PDF.");
+        }
+        const data = result.data;
         setFormData(prev => ({
           ...prev,
           ...data,
@@ -203,8 +206,13 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
           })
         );
 
-        const validResults = results.filter(r => Object.keys(r).length > 0);
-        if (validResults.length === 0) throw new Error("No se pudo extraer información de los PDFs.");
+        const validResults = results
+          .filter(r => r.success && r.data)
+          .map(r => r.data!);
+        if (validResults.length === 0) {
+          const errorMsg = results.find(r => r.error)?.error || "No se pudo extraer información de los PDFs.";
+          throw new Error(errorMsg);
+        }
 
         // Ordenar por período (el más antiguo primero)
         validResults.sort((a, b) => (a.periodo || '').localeCompare(b.periodo || ''));
@@ -261,6 +269,34 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
   const saldoFinalP1 = (formData.saldoDisponibleP1 || 0) - (formData.solicitadoP1 || 0);
   const saldoFinalP2 = (formData.saldoDisponibleP2 || 0) - (formData.solicitadoP2 || 0);
 
+  // Función para detectar conflictos de fechas
+  const checkDateConflict = (fechaInicio: string, cantidadDias: number, rut: string, editingId?: string): PermitRecord | null => {
+    const startDate = new Date(fechaInicio + 'T12:00:00');
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + Math.ceil(cantidadDias) - 1);
+
+    // Buscar registros del mismo funcionario
+    const existingRecords = records.filter(r =>
+      r.rut === rut &&
+      r.id !== editingId // Excluir el registro que estamos editando
+    );
+
+    for (const record of existingRecords) {
+      if (!record.fechaInicio) continue;
+
+      const recordStart = new Date(record.fechaInicio + 'T12:00:00');
+      const recordEnd = new Date(recordStart);
+      recordEnd.setDate(recordStart.getDate() + Math.ceil(record.cantidadDias) - 1);
+
+      // Verificar overlap
+      const hasOverlap = startDate <= recordEnd && endDate >= recordStart;
+      if (hasOverlap) {
+        return record;
+      }
+    }
+    return null;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: FormErrors = {};
@@ -274,6 +310,35 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
     if (formData.solicitudType === 'FL') {
       if (!formData.fechaTermino) newErrors.fechaTermino = 'Requerido';
       else if (!validateDate(formData.fechaTermino)) newErrors.fechaTermino = 'Fecha inválida';
+    }
+
+    // ★ VALIDACIÓN DE SALDO INSUFICIENTE (solo PA)
+    if (formData.solicitudType === 'PA' && !editingRecord) {
+      if (formData.cantidadDias > formData.diasHaber) {
+        newErrors.cantidadDias = 'Saldo insuficiente';
+        setFormError(`Saldo insuficiente: solicitas ${formData.cantidadDias} días pero solo tienes ${formData.diasHaber} disponibles.`);
+        setErrors(newErrors);
+        return;
+      }
+    }
+
+    // ★ VALIDACIÓN DE CONFLICTO DE FECHAS
+    if (formData.fechaInicio && formData.rut) {
+      const conflictingRecord = checkDateConflict(
+        formData.fechaInicio,
+        formData.cantidadDias,
+        formData.rut,
+        editingRecord?.id
+      );
+
+      if (conflictingRecord) {
+        newErrors.fechaInicio = 'Conflicto de fechas';
+        const conflictType = conflictingRecord.solicitudType === 'PA' ? 'Permiso Administrativo' : 'Feriado Legal';
+        const conflictDate = new Date(conflictingRecord.fechaInicio + 'T12:00:00').toLocaleDateString('es-CL');
+        setFormError(`⚠️ Conflicto: ${formData.funcionario} ya tiene un ${conflictType} registrado desde el ${conflictDate} (${conflictingRecord.cantidadDias} días). Las fechas se superponen.`);
+        setErrors(newErrors);
+        return;
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -405,7 +470,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
           {/* ===================== DATOS COMUNES ===================== */}
           <div className="bg-slate-50/50 dark:bg-slate-700/20 p-4 sm:p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
             <SectionTitle icon={User} title="Datos del Funcionario" color="border-slate-200 dark:border-slate-600 text-slate-600" />
-            
+
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               {/* Nombre */}
               <div className="md:col-span-8 relative" ref={dropdownRef}>
