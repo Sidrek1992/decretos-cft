@@ -86,7 +86,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ records, employ
 
             if (flRecords.length > 0) {
                 const lastFL = flRecords[0];
-                const saldoFL = (lastFL.saldoDisponibleP1 || 0) - (lastFL.solicitadoP1 || 0);
+                const saldoFL = lastFL.saldoFinalP2 ?? lastFL.saldoFinalP1 ?? 0;
 
                 if (saldoFL <= 0) {
                     newNotifications.push({

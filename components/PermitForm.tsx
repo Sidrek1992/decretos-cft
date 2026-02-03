@@ -126,12 +126,29 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
         .sort((a, b) => b.createdAt - a.createdAt);
 
       if (empRecords.length > 0) {
-        const saldo = empRecords[0].diasHaber - empRecords[0].cantidadDias;
-        setFormData(prev => ({ ...prev, diasHaber: saldo }));
-        setDetectedSaldo(saldo);
+        const last = empRecords[0];
+
+        if (formData.solicitudType === 'PA') {
+          // PA: saldo = diasHaber - cantidadDias del último registro (saldo final de ese decreto)
+          const saldoPA = last.diasHaber - last.cantidadDias;
+          setFormData(prev => ({ ...prev, diasHaber: saldoPA }));
+          setDetectedSaldo(saldoPA);
+        } else {
+          // FL: tomar "Saldo Final Periodo 2" si tiene 2 períodos, sino "Saldo Final Periodo 1"
+          const tiene2Periodos = last.periodo2 && last.periodo2.trim() !== '';
+          const saldoFL = tiene2Periodos
+            ? (last.saldoFinalP2 || 0)
+            : (last.saldoFinalP1 || 0);
+          setFormData(prev => ({ ...prev, saldoDisponibleP1: saldoFL }));
+          setDetectedSaldo(saldoFL);
+        }
       } else {
-        const base = CONFIG.BASE_DAYS[formData.solicitudType];
-        setFormData(prev => ({ ...prev, diasHaber: base }));
+        if (formData.solicitudType === 'PA') {
+          const base = CONFIG.BASE_DAYS.PA;
+          setFormData(prev => ({ ...prev, diasHaber: base }));
+        } else {
+          setFormData(prev => ({ ...prev, saldoDisponibleP1: 0 }));
+        }
         setDetectedSaldo(null);
       }
     }
@@ -197,14 +214,14 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
           rut: formatRut(data.rut || "")
         }));
       } else {
-        // FL: 1 o 2 archivos (cada uno un período)
+        // FL: 1 o 2 archivos (cada uno un período) — secuencial para evitar 503 por sobrecarga
         const fileArray = Array.from(files);
-        const results = await Promise.all(
-          fileArray.map(async (file) => {
-            const base64 = await readFileAsBase64(file);
-            return extractFLDataFromPdf(base64);
-          })
-        );
+        const results: Awaited<ReturnType<typeof extractFLDataFromPdf>>[] = [];
+        for (const file of fileArray) {
+          const base64 = await readFileAsBase64(file);
+          const result = await extractFLDataFromPdf(base64);
+          results.push(result);
+        }
 
         const validResults = results
           .filter(r => r.success && r.data)
@@ -242,8 +259,10 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
           solicitadoP2: second?.solicitado || second?.cantidadDias || 0,
         }));
       }
-    } catch {
-      setFormError("Error al procesar PDF con IA. Por favor, ingresa los datos manualmente.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      console.error('[AI] Error al procesar PDF:', err);
+      setFormError(message || "Error al procesar PDF con IA. Por favor, ingresa los datos manualmente.");
     } finally {
       setIsProcessing(false);
       // Limpiar input para permitir re-subida
@@ -751,9 +770,12 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Período</label>
                     <input name="periodo1" value={formData.periodo1 || ''} onChange={handleChange} placeholder="2024-2025" className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-4 py-3 rounded-xl font-bold text-slate-800 dark:text-white outline-none focus:border-sky-500 text-sm text-center" />
                   </div>
-                  <div>
+                  <div className="relative">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Saldo Disponible</label>
                     <input type="number" step="0.5" name="saldoDisponibleP1" value={formData.saldoDisponibleP1 || 0} onChange={handleChange} className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-4 py-3 rounded-xl font-black text-slate-800 dark:text-white outline-none focus:border-sky-500 text-sm text-center" />
+                    {detectedSaldo !== null && (
+                      <span className="absolute -top-1 right-2 bg-sky-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full">SYNC</span>
+                    )}
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Solicitado</label>

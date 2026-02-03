@@ -40,21 +40,42 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
  * Procesa un PDF usando el backend de Google Apps Script (recomendado)
  * Esto mantiene la API key segura en el servidor
  */
+const BACKEND_TIMEOUT_MS = 10000; // 10 segundos
+
 const processWithBackend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'): Promise<Record<string, unknown>> => {
   aiLogger.info('Procesando PDF con backend GAS...');
   
   const url = solicitudType === 'PA' ? CONFIG.WEB_APP_URL : CONFIG.WEB_APP_URL_FL;
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    mode: 'cors',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'processAI',
-      pdfBase64: base64Pdf,
-      solicitudType
-    })
-  });
+  aiLogger.debug('Backend URL (' + solicitudType + '):', url);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'processAI',
+        pdfBase64: base64Pdf,
+        solicitudType
+      }),
+      signal: controller.signal
+    });
+  } catch (fetchError) {
+    if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+      throw new Error('Timeout: el backend GAS no respondió en 30 segundos');
+    }
+    throw new Error('Error de red al conectar con backend: ' + (fetchError instanceof Error ? fetchError.message : String(fetchError)));
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    throw new Error('Backend respondió con HTTP ' + response.status);
+  }
 
   const result = await response.json();
   
@@ -69,6 +90,11 @@ const processWithBackend = async (base64Pdf: string, solicitudType: 'PA' | 'FL')
  * Procesa un PDF usando la API de Gemini directamente (fallback)
  * Solo se usa si el backend no está disponible
  */
+const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000; // 2 segundos entre reintentos
+
 const processWithFrontend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'): Promise<Record<string, unknown>> => {
   aiLogger.info('Procesando PDF con frontend (fallback)...');
   
@@ -79,29 +105,29 @@ const processWithFrontend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'
 
   const prompt = solicitudType === 'PA' 
     ? `Actúa como un experto administrativo. Analiza esta SOLICITUD DE PERMISO O FERIADO. 
-       Extrae con precisión los siguientes campos del documento:
-       - funcionario: Nombre completo del solicitante.
-       - rut: RUT del solicitante (con puntos y guion).
-       - solicitudType: 'PA' si es Permiso Administrativo, 'FL' si es Feriado Legal.
-       - cantidadDias: Número de días solicitados (ej. 1, 0.5, 3).
-       - fechaInicio: Fecha de inicio del permiso en formato YYYY-MM-DD.
-       - tipoJornada: Identifica si es 'Jornada completa', 'Jornada mañana', o 'Jornada tarde'.
-       - fechaDecreto: Fecha de la solicitud que aparece en la parte superior del documento, en formato YYYY-MM-DD.
-       
-       Responde estrictamente en formato JSON siguiendo el esquema proporcionado.`
+        Extrae con precisión los siguientes campos del documento:
+        - funcionario: Nombre completo del solicitante.
+        - rut: RUT del solicitante (con puntos y guion).
+        - solicitudType: 'PA' si es Permiso Administrativo, 'FL' si es Feriado Legal.
+        - cantidadDias: Número de días solicitados (ej. 1, 0.5, 3).
+        - fechaInicio: Fecha de inicio del permiso en formato YYYY-MM-DD.
+        - tipoJornada: Identifica si es 'Jornada completa', 'Jornada mañana', o 'Jornada tarde'.
+        - fechaDecreto: Fecha de la solicitud que aparece en la parte superior del documento, en formato YYYY-MM-DD.
+        
+        Responde estrictamente en formato JSON siguiendo el esquema proporcionado.`
     : `Actúa como un experto administrativo. Analiza este FORMULARIO DE SOLICITUD DE FERIADO LEGAL.
-       Extrae con precisión los siguientes campos del documento:
-       - funcionario: Nombre completo del solicitante.
-       - rut: RUT del solicitante (con puntos y guion).
-       - periodo: El período al que corresponde el feriado (ej: "2024-2025" o "2025-2026").
-       - saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud.
-       - solicitado: Cantidad de días solicitados en ESTE formulario para ESTE período.
-       - cantidadDias: Total de días solicitados (igual que solicitado).
-       - fechaInicio: Fecha de inicio del feriado en formato YYYY-MM-DD.
-       - fechaTermino: Fecha de término del feriado en formato YYYY-MM-DD.
-       - fechaDecreto: Fecha de la solicitud que aparece en la parte superior del documento, en formato YYYY-MM-DD.
-       
-       Responde estrictamente en formato JSON siguiendo el esquema proporcionado.`;
+        Extrae con precisión los siguientes campos del documento:
+        - funcionario: Nombre completo del solicitante.
+        - rut: RUT del solicitante (con puntos y guion).
+        - periodo: El período al que corresponde el feriado (ej: "2024-2025" o "2025-2026").
+        - saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud.
+        - solicitado: Cantidad de días solicitados en ESTE formulario para ESTE período.
+        - cantidadDias: Total de días solicitados (igual que solicitado).
+        - fechaInicio: Fecha de inicio del feriado en formato YYYY-MM-DD.
+        - fechaTermino: Fecha de término del feriado en formato YYYY-MM-DD.
+        - fechaDecreto: Fecha de la solicitud que aparece en la parte superior del documento, en formato YYYY-MM-DD.
+        
+        Responde estrictamente en formato JSON siguiendo el esquema proporcionado.`;
 
   const schema = solicitudType === 'PA' 
     ? {
@@ -133,32 +159,49 @@ const processWithFrontend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'
         required: ["funcionario", "rut", "solicitado"]
       };
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: [{
-      parts: [
-        {
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: base64Pdf
-          }
-        },
-        { text: prompt }
-      ]
-    }],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: schema
-    }
-  });
+  let lastError: Error | undefined;
 
-  const textOutput = response.text;
-  if (!textOutput) {
-    aiLogger.warn('La IA no devolvió texto en la respuesta');
-    return {};
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: base64Pdf
+              }
+            },
+            { text: prompt }
+          ]
+        }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: schema
+        }
+      });
+
+      const textOutput = response.text;
+      if (!textOutput) {
+        aiLogger.warn('La IA no devolvió texto en la respuesta');
+        return {};
+      }
+
+      return JSON.parse(textOutput.trim());
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const is503 = lastError.message.includes('503') || lastError.message.includes('UNAVAILABLE') || lastError.message.includes('overloaded');
+      if (is503 && attempt < MAX_RETRIES) {
+        aiLogger.warn(`Modelo sobrecargado (intento ${attempt}/${MAX_RETRIES}). Reintentar en ${RETRY_DELAY_MS}ms...`);
+        await delay(RETRY_DELAY_MS * attempt);
+        continue;
+      }
+      throw lastError;
+    }
   }
 
-  return JSON.parse(textOutput.trim());
+  throw lastError!;
 };
 
 /**

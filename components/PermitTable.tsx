@@ -25,6 +25,12 @@ type SortOrder = 'asc' | 'desc';
 
 const emptyFilters: FilterState = { dateFrom: '', dateTo: '', minDays: '', maxDays: '', materia: '' };
 
+/** Saldo after the decree: PA uses diasHaber - cantidadDias; FL uses saldoFinalP2 ?? saldoFinalP1. */
+const getSaldo = (r: PermitRecord): number =>
+  r.solicitudType === 'FL'
+    ? (r.saldoFinalP2 ?? r.saldoFinalP1 ?? 0)
+    : r.diasHaber - r.cantidadDias;
+
 const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, onEdit, canEdit = true, canDelete = true }) => {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -77,7 +83,7 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
         case 'solicitudType': valA = a.solicitudType; valB = b.solicitudType; break;
         case 'fechaInicio': valA = new Date(a.fechaInicio).getTime(); valB = new Date(b.fechaInicio).getTime(); break;
         case 'cantidadDias': valA = a.cantidadDias; valB = b.cantidadDias; break;
-        case 'saldo': valA = a.diasHaber - a.cantidadDias; valB = b.diasHaber - b.cantidadDias; break;
+        case 'saldo': valA = getSaldo(a); valB = getSaldo(b); break;
         case 'fechaDecreto': valA = new Date(a.fechaDecreto || '').getTime() || 0; valB = new Date(b.fechaDecreto || '').getTime() || 0; break;
         default: return 0;
       }
@@ -393,13 +399,13 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
                       </div>
                     </td>
                     <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
-                      <span className={`font-black text-sm sm:text-[13px] ${(record.diasHaber - record.cantidadDias) < 0
-                        ? 'text-red-500 dark:text-red-400'
-                        : 'text-emerald-600 dark:text-emerald-400'
-                        }`}>
-                        {(record.diasHaber - record.cantidadDias).toFixed(1)}
-                      </span>
-                    </td>
+                       <span className={`font-black text-sm sm:text-[13px] ${getSaldo(record) < 0
+                         ? 'text-red-500 dark:text-red-400'
+                         : 'text-emerald-600 dark:text-emerald-400'
+                         }`}>
+                         {getSaldo(record).toFixed(1)}
+                       </span>
+                     </td>
                     <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
                       <span className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate whitespace-nowrap">
                         {formatNumericDate(record.fechaInicio)}

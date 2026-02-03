@@ -18,13 +18,11 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
             saldoFL: number | null;
         }> = {};
 
-        // Procesar PA
-        const paRecords = records
-            .filter(r => r.solicitudType === 'PA')
-            .sort((a, b) => b.createdAt - a.createdAt);
+        const sorted = [...records].sort((a, b) => b.createdAt - a.createdAt);
 
+        // Procesar PA — saldo final = diasHaber - cantidadDias del último registro
         const seenPA = new Set<string>();
-        paRecords.forEach(r => {
+        sorted.filter(r => r.solicitudType === 'PA').forEach(r => {
             if (!seenPA.has(r.rut)) {
                 if (!balanceByEmployee[r.rut]) {
                     balanceByEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
@@ -34,18 +32,15 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
             }
         });
 
-        // Procesar FL
-        const flRecords = records
-            .filter(r => r.solicitudType === 'FL')
-            .sort((a, b) => b.createdAt - a.createdAt);
-
+        // Procesar FL — usar saldoFinalP2 si tiene 2 períodos, sino saldoFinalP1
         const seenFL = new Set<string>();
-        flRecords.forEach(r => {
+        sorted.filter(r => r.solicitudType === 'FL').forEach(r => {
             if (!seenFL.has(r.rut)) {
                 if (!balanceByEmployee[r.rut]) {
                     balanceByEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
                 }
-                balanceByEmployee[r.rut].saldoFL = r.diasHaber - r.cantidadDias;
+                const tiene2Periodos = r.periodo2 && r.periodo2.trim() !== '';
+                balanceByEmployee[r.rut].saldoFL = tiene2Periodos ? (r.saldoFinalP2 || 0) : (r.saldoFinalP1 || 0);
                 seenFL.add(r.rut);
             }
         });

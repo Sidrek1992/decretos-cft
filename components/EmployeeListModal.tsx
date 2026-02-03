@@ -36,7 +36,8 @@ interface EmployeeStats {
   diasPA: number;
   diasFL: number;
   diasHaber: number;
-  saldo: number;
+  saldo: number;    // PA saldo (diasHaber - cantidadDias of last PA record)
+  saldoFL: number;  // FL saldo (saldoFinalP2 ?? saldoFinalP1 of last FL record)
   lastDecree: PermitRecord | null;
   decrees: PermitRecord[];
 }
@@ -90,18 +91,28 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
         .filter(r => r.solicitudType === 'FL')
         .reduce((sum, r) => sum + r.cantidadDias, 0);
 
-      const diasHaber = empRecords.length > 0
-        ? empRecords[0].diasHaber
-        : 6;
-
       const sortedDecrees = [...empRecords].sort((a, b) => b.createdAt - a.createdAt);
+
+      // PA saldo: from the most recent PA record (diasHaber - cantidadDias)
+      const lastPA = empRecords
+        .filter(r => r.solicitudType === 'PA')
+        .sort((a, b) => b.createdAt - a.createdAt)[0];
+      const diasHaber = lastPA ? lastPA.diasHaber : 6;
+      const saldo = lastPA ? lastPA.diasHaber - lastPA.cantidadDias : 6;
+
+      // FL saldo: from the most recent FL record (saldoFinalP2 ?? saldoFinalP1)
+      const lastFL = empRecords
+        .filter(r => r.solicitudType === 'FL')
+        .sort((a, b) => b.createdAt - a.createdAt)[0];
+      const saldoFL = lastFL ? (lastFL.saldoFinalP2 ?? lastFL.saldoFinalP1 ?? 0) : 0;
 
       stats[emp.rut] = {
         totalDecrees: empRecords.length,
         diasPA,
         diasFL,
         diasHaber,
-        saldo: diasHaber - diasPA,
+        saldo,
+        saldoFL,
         lastDecree: sortedDecrees[0] || null,
         decrees: sortedDecrees
       };
@@ -160,8 +171,8 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
         return true;
       })
       .sort((a, b) => {
-        const statsA = employeeStats[a.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6 };
-        const statsB = employeeStats[b.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6 };
+        const statsA = employeeStats[a.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, saldoFL: 0 };
+        const statsB = employeeStats[b.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, saldoFL: 0 };
 
         let valA: string | number;
         let valB: string | number;
@@ -256,14 +267,15 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
       const XLSX = await import('xlsx');
 
       const data = filteredEmployees.map(emp => {
-        const stats = employeeStats[emp.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, lastDecree: null };
+        const stats = employeeStats[emp.rut] || { totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, saldoFL: 0, lastDecree: null };
         return {
           'Nombre': emp.nombre,
           'RUT': emp.rut,
           'Total Decretos': stats.totalDecrees,
           'Días PA': stats.diasPA,
           'Días FL': stats.diasFL,
-          'Saldo': stats.saldo,
+          'Saldo PA': stats.saldo,
+          'Saldo FL': stats.diasFL > 0 ? stats.saldoFL : '-',
           'Último Decreto': stats.lastDecree ? stats.lastDecree.acto : '-'
         };
       });
@@ -607,7 +619,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
           <div className="grid gap-1">
             {paginatedEmployees.map((emp, index) => {
               const stats = employeeStats[emp.rut] || {
-                totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, diasHaber: 6, lastDecree: null, decrees: []
+                totalDecrees: 0, diasPA: 0, diasFL: 0, saldo: 6, saldoFL: 0, diasHaber: 6, lastDecree: null, decrees: []
               };
               const isExpanded = expandedEmployee === emp.rut;
               const isEditing = editingEmployee === emp.rut;
@@ -673,7 +685,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                   {isExpanded && (
                     <div className="mt-2 ml-4 sm:ml-16 p-4 bg-white dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 space-y-4 animate-in slide-in-from-top-2 duration-200">
                       {/* Quick Stats */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                         <div className="bg-slate-50 dark:bg-slate-600 rounded-lg p-3">
                           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Decretos</p>
                           <p className="text-lg font-black text-slate-700 dark:text-white">{stats.totalDecrees}</p>
@@ -687,8 +699,14 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                           <p className="text-lg font-black text-amber-600 dark:text-amber-400">{stats.diasFL}</p>
                         </div>
                         <div className={`rounded-lg p-3 ${getSaldoColor(stats.saldo)}`}>
-                          <p className="text-[9px] font-bold opacity-70 uppercase tracking-wider mb-1">Saldo Disponible</p>
+                          <p className="text-[9px] font-bold opacity-70 uppercase tracking-wider mb-1">Saldo PA</p>
                           <p className="text-lg font-black">{stats.saldo.toFixed(1)} / {stats.diasHaber}</p>
+                        </div>
+                        <div className={`rounded-lg p-3 ${stats.diasFL > 0 ? getSaldoColor(stats.saldoFL) : 'bg-slate-50 dark:bg-slate-600'}`}>
+                          <p className="text-[9px] font-bold opacity-70 uppercase tracking-wider mb-1">Saldo FL</p>
+                          <p className={`text-lg font-black ${stats.diasFL === 0 ? 'text-slate-400' : ''}`}>
+                            {stats.diasFL > 0 ? stats.saldoFL.toFixed(1) : '—'}
+                          </p>
                         </div>
                       </div>
 
