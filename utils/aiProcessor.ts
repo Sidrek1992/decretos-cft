@@ -120,7 +120,7 @@ const processWithFrontend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'
         - funcionario: Nombre completo del solicitante.
         - rut: RUT del solicitante (con puntos y guion).
         - periodo: El período al que corresponde el feriado (ej: "2024-2025" o "2025-2026").
-        - saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud.
+        - saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud. Este valor puede aparecer en el documento etiquetado como "Total días hábiles", "Saldo disponible", "Días a su haber" o similar. Es el número de días que el funcionario tenía disponibles al momento de hacer la solicitud.
         - solicitado: Cantidad de días solicitados en ESTE formulario para ESTE período.
         - cantidadDias: Total de días solicitados (igual que solicitado).
         - fechaInicio: Fecha de inicio del feriado en formato YYYY-MM-DD.
@@ -149,7 +149,7 @@ const processWithFrontend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'
           funcionario: { type: Type.STRING, description: "Nombre completo del funcionario" },
           rut: { type: Type.STRING, description: "RUT del funcionario" },
           periodo: { type: Type.STRING, description: "Período del feriado (ej: 2024-2025)" },
-          saldoDisponible: { type: Type.NUMBER, description: "Saldo disponible antes de la solicitud" },
+          saldoDisponible: { type: Type.NUMBER, description: "Saldo disponible antes de la solicitud. Puede aparecer como 'Total días hábiles', 'Saldo disponible' o 'Días a su haber' en el documento." },
           solicitado: { type: Type.NUMBER, description: "Días solicitados en este formulario" },
           cantidadDias: { type: Type.NUMBER, description: "Total días solicitados" },
           fechaInicio: { type: Type.STRING, description: "Fecha de inicio del feriado" },

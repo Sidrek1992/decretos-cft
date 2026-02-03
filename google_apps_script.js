@@ -387,7 +387,7 @@ Extrae con precisión los siguientes campos del documento:
 - funcionario: Nombre completo del solicitante.
 - rut: RUT del solicitante (con puntos y guion).
 - periodo: El período al que corresponde el feriado (ej: "2024-2025").
-- saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud.
+- saldoDisponible: Días de saldo disponible que tenía el funcionario ANTES de esta solicitud. Este valor puede aparecer en el documento etiquetado como "Total días hábiles", "Saldo disponible", "Días a su haber" o similar. Es el número de días que el funcionario tenía disponibles al momento de hacer la solicitud.
 - solicitado: Cantidad de días solicitados en este formulario.
 - cantidadDias: Total de días solicitados (igual que solicitado).
 - fechaInicio: Fecha de inicio del feriado en formato YYYY-MM-DD.
