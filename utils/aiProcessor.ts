@@ -10,6 +10,62 @@ import { logger } from "./logger";
 
 const aiLogger = logger.create('AI');
 
+const parseAiNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (value === null || value === undefined) return undefined;
+
+  const text = String(value).trim();
+  if (!text) return undefined;
+
+  const match = text.match(/-?\d+(?:[.,]\d+)?/);
+  if (!match) return undefined;
+
+  const num = parseFloat(match[0].replace(',', '.'));
+  return Number.isNaN(num) ? undefined : num;
+};
+
+const coalesceAiNumber = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    const parsed = parseAiNumber(value);
+    if (parsed !== undefined) return parsed;
+  }
+  return undefined;
+};
+
+const findAiNumberByKey = (data: Record<string, unknown>, patterns: RegExp[]): number | undefined => {
+  for (const [key, value] of Object.entries(data)) {
+    if (patterns.some(pattern => pattern.test(key))) {
+      const parsed = parseAiNumber(value);
+      if (parsed !== undefined) return parsed;
+    }
+  }
+  return undefined;
+};
+
+const normalizeFLData = (data: Record<string, unknown>): FLExtractedData => {
+  const saldoDisponible = coalesceAiNumber(
+    data.saldoDisponible,
+    findAiNumberByKey(data, [
+      /saldo\s*disponible/i,
+      /saldo\s*anterior/i,
+      /total\s*d[ií]as?\s*h[aá]biles?/i,
+      /d[ií]as?\s*a\s*su\s*haber/i,
+      /dias?\s*haber/i
+    ])
+  );
+  const solicitado = coalesceAiNumber(data.solicitado, data.cantidadDias);
+  const cantidadDias = coalesceAiNumber(data.cantidadDias, data.solicitado);
+
+  return {
+    ...data,
+    ...(saldoDisponible !== undefined ? { saldoDisponible } : {}),
+    ...(solicitado !== undefined ? { solicitado } : {}),
+    ...(cantidadDias !== undefined ? { cantidadDias } : {})
+  } as FLExtractedData;
+};
+
 // Tipos para respuestas estructuradas
 export interface AIProcessResult<T> {
   success: boolean;
@@ -252,7 +308,13 @@ export const extractFLDataFromPdf = async (base64Pdf: string): Promise<AIProcess
     if (USE_BACKEND_AI) {
       try {
         const data = await processWithBackend(base64Pdf, 'FL');
-        return { success: true, data: data as FLExtractedData };
+        aiLogger.info('[FL] Respuesta del BACKEND:', JSON.stringify(data, null, 2));
+        aiLogger.info('[FL] saldoDisponible extraído:', data.saldoDisponible);
+        aiLogger.info('[FL] Todas las propiedades:', Object.keys(data));
+
+        const normalized = normalizeFLData(data);
+        aiLogger.info('[FL] saldoDisponible normalizado:', normalized.saldoDisponible);
+        return { success: true, data: normalized };
       } catch (backendError) {
         aiLogger.warn('Backend no disponible, usando fallback frontend:', backendError);
       }
@@ -260,13 +322,18 @@ export const extractFLDataFromPdf = async (base64Pdf: string): Promise<AIProcess
     
     // Fallback a frontend
     const data = await processWithFrontend(base64Pdf, 'FL');
+    aiLogger.info('[FL] Respuesta del FRONTEND:', JSON.stringify(data, null, 2));
+    aiLogger.info('[FL] saldoDisponible extraído:', data.saldoDisponible);
+    aiLogger.info('[FL] Todas las propiedades:', Object.keys(data));
     
     // Verificar que se extrajo al menos algún dato útil
     if (Object.keys(data).length === 0) {
       return { success: false, error: 'No se pudieron extraer datos del PDF' };
     }
     
-    return { success: true, data: data as FLExtractedData };
+    const normalized = normalizeFLData(data);
+    aiLogger.info('[FL] saldoDisponible normalizado:', normalized.saldoDisponible);
+    return { success: true, data: normalized };
     
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Error desconocido';

@@ -84,6 +84,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const skipAutoSaldoRef = useRef(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -120,6 +121,11 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
   }, [formData.solicitudType, nextCorrelatives, editingRecord]);
 
   useEffect(() => {
+    if (skipAutoSaldoRef.current) {
+      skipAutoSaldoRef.current = false;
+      return;
+    }
+
     if (!editingRecord && formData.rut) {
       const empRecords = records
         .filter(r => r.rut === formData.rut && r.solicitudType === formData.solicitudType)
@@ -231,14 +237,34 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
           throw new Error(errorMsg);
         }
 
+        // DEBUG: Ver exactamente qué devuelve la IA para cada PDF
+        console.log('[FL Scan] Resultados crudos de la IA:', JSON.stringify(validResults, null, 2));
+        validResults.forEach((r, i) => {
+          console.log(`[FL Scan] PDF ${i + 1}:`, {
+            periodo: r.periodo,
+            saldoDisponible: r.saldoDisponible,
+            solicitado: r.solicitado,
+            cantidadDias: r.cantidadDias,
+            // Mostrar todas las propiedades por si viene con otro nombre
+            todasLasPropiedades: Object.keys(r)
+          });
+        });
+
         // Ordenar por período (el más antiguo primero)
         validResults.sort((a, b) => (a.periodo || '').localeCompare(b.periodo || ''));
 
         const first = validResults[0];
         const second = validResults.length > 1 ? validResults[1] : null;
 
+        console.log('[FL Scan] Después de ordenar - first:', first);
+        console.log('[FL Scan] Después de ordenar - second:', second);
+        console.log('[FL Scan] saldoDisponibleP1 será:', first.saldoDisponible || 0);
+        console.log('[FL Scan] saldoDisponibleP2 será:', second?.saldoDisponible || 0);
+
         // Calcular totales
         const totalDias = (first.solicitado || first.cantidadDias || 0) + (second?.solicitado || second?.cantidadDias || 0);
+
+        skipAutoSaldoRef.current = true;
 
         setFormData(prev => ({
           ...prev,
@@ -258,7 +284,10 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
           saldoDisponibleP2: second?.saldoDisponible || 0,
           solicitadoP2: second?.solicitado || second?.cantidadDias || 0,
         }));
-      }
+
+        const scannedSaldo = typeof first.saldoDisponible === 'number' ? first.saldoDisponible : null;
+        setDetectedSaldo(scannedSaldo);
+    }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       console.error('[AI] Error al procesar PDF:', err);
