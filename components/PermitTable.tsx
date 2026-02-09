@@ -1,10 +1,11 @@
 
 import React, { useState, useMemo, useCallback, memo } from 'react';
 import { PermitRecord, SolicitudType } from '../types';
-import { Search, ArrowUpDown, ChevronUp, ChevronDown, UserCircle, LayoutGrid, CheckSquare, Square, FileDown, Loader2, X } from 'lucide-react';
+import { Search, ArrowUpDown, ChevronUp, ChevronDown, UserCircle, LayoutGrid, CheckSquare, Square, FileDown, Loader2, X, Archive, Download, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
+import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { generateDecretoPDF } from '../services/pdfGenerator';
-import { generateBatchPDFs } from '../services/batchPdfGenerator';
+import { generateBatchPDFs, BatchMode, BatchProgressInfo } from '../services/batchPdfGenerator';
 import Pagination from './Pagination';
 import ActionMenu from './ActionMenu';
 import AdvancedFilters, { FilterState } from './AdvancedFilters';
@@ -16,6 +17,8 @@ interface PermitTableProps {
   activeTab: SolicitudType | 'ALL';
   onDelete: (id: string) => void;
   onEdit: (record: PermitRecord) => void;
+  searchTerm?: string;
+  onSearchTermChange?: (value: string) => void;
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -31,8 +34,17 @@ const getSaldo = (r: PermitRecord): number =>
     ? (r.saldoFinalP2 ?? r.saldoFinalP1 ?? 0)
     : r.diasHaber - r.cantidadDias;
 
-const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, onEdit, canEdit = true, canDelete = true }) => {
-  const [search, setSearch] = useState('');
+const PermitTable: React.FC<PermitTableProps> = ({
+  data,
+  activeTab,
+  onDelete,
+  onEdit,
+  searchTerm,
+  onSearchTermChange,
+  canEdit = true,
+  canDelete = true
+}) => {
+  const [search, setSearch] = useState(searchTerm || '');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,7 +54,7 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
   // ★ Estado para selección múltiple
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchGenerating, setIsBatchGenerating] = useState(false);
-  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [batchProgressInfo, setBatchProgressInfo] = useState<BatchProgressInfo | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -72,7 +84,7 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
 
       return matchesSearch && matchesTab && matchesAdvanced;
     }).sort((a, b) => {
-      if (!sortField) return b.createdAt - a.createdAt;
+      if (!sortField) return compareRecordsByDateDesc(a, b);
 
       let valA: string | number | Date;
       let valB: string | number | Date;
@@ -102,8 +114,14 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
   }, [filtered, currentPage]);
 
   React.useEffect(() => {
+    if (searchTerm !== undefined && searchTerm !== search) {
+      setSearch(searchTerm);
+    }
+  }, [searchTerm, search]);
+
+  React.useEffect(() => {
     setCurrentPage(1);
-  }, [search, activeTab]);
+  }, [search, activeTab, advFilters]);
 
   // ★ Funciones de selección múltiple
   const toggleSelect = useCallback((id: string) => {
@@ -131,22 +149,24 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
   }, []);
 
   // ★ Generación masiva de PDFs
-  const handleBatchGenerate = useCallback(async () => {
+  const handleBatchGenerate = useCallback(async (mode: BatchMode) => {
     const selectedRecords = filtered.filter(r => selectedIds.has(r.id));
     if (selectedRecords.length === 0) return;
 
     setIsBatchGenerating(true);
-    setBatchProgress({ current: 0, total: selectedRecords.length });
+    setBatchProgressInfo({ current: 0, total: selectedRecords.length, currentFile: '', status: 'generating' });
 
     try {
-      await generateBatchPDFs(selectedRecords, (current, total) => {
-        setBatchProgress({ current, total });
+      await generateBatchPDFs(selectedRecords, mode, (info) => {
+        setBatchProgressInfo(info);
       });
-
-      clearSelection();
     } finally {
-      setIsBatchGenerating(false);
-      setBatchProgress({ current: 0, total: 0 });
+      // Mantener el modal abierto un momento para mostrar el resultado
+      setTimeout(() => {
+        setIsBatchGenerating(false);
+        setBatchProgressInfo(null);
+        clearSelection();
+      }, 2500);
     }
   }, [filtered, selectedIds, clearSelection]);
 
@@ -180,39 +200,147 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
     <div className="space-y-4 sm:space-y-6">
       {/* ★ Toolbar de Selección Múltiple */}
       {selectedIds.size > 0 && (
-        <div className="bg-indigo-600 text-white px-4 py-3 rounded-2xl flex items-center justify-between shadow-lg animate-in slide-in-from-top-2 duration-200">
+        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-4 sm:px-5 py-3.5 rounded-2xl flex items-center justify-between shadow-xl page-fade-in">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-black">{selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}</span>
+            <div className="flex items-center gap-2 bg-white/15 px-3 py-1.5 rounded-xl">
+              <CheckSquare size={14} />
+              <span className="text-xs font-black">{selectedIds.size}</span>
+            </div>
+            <span className="text-[11px] font-bold text-white/70 uppercase tracking-wider hidden sm:inline">
+              seleccionado{selectedIds.size > 1 ? 's' : ''}
+            </span>
             <button
               onClick={clearSelection}
               className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+              title="Deseleccionar"
             >
-              <X size={16} />
+              <X size={14} />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            {isBatchGenerating ? (
-              <div className="flex items-center gap-3 bg-white/20 px-4 py-2 rounded-xl">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-xs font-bold">
-                  Generando {batchProgress.current}/{batchProgress.total}...
-                </span>
-                <div className="w-24 h-1.5 bg-white/30 rounded-full overflow-hidden">
+            {!isBatchGenerating && (
+              <>
+                <button
+                  onClick={() => handleBatchGenerate('individual')}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-white text-indigo-600 rounded-xl text-[10px] sm:text-[11px] font-black hover:bg-indigo-50 transition-all active:scale-95 shadow-lg uppercase tracking-wider"
+                  title="Cada decreto se descarga individualmente apenas se genera"
+                >
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Descargar </span>Uno a uno
+                </button>
+                <button
+                  onClick={() => handleBatchGenerate('zip')}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-emerald-500 text-white rounded-xl text-[10px] sm:text-[11px] font-black hover:bg-emerald-400 transition-all active:scale-95 shadow-lg uppercase tracking-wider"
+                  title="Todos los decretos se descargan en un solo archivo ZIP"
+                >
+                  <Archive size={14} />
+                  <span className="hidden sm:inline">Descargar </span>ZIP
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ★ Modal de Progreso de Generación */}
+      {isBatchGenerating && batchProgressInfo && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 notification-backdrop-enter">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl shadow-2xl overflow-hidden notification-panel-enter">
+            {/* Header */}
+            <div className="relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent" />
+              <div className="relative p-6 text-white">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2.5 bg-white/10 backdrop-blur rounded-xl ring-1 ring-white/20">
+                    {batchProgressInfo.status === 'done'
+                      ? <CheckCircle className="w-5 h-5 text-emerald-300" />
+                      : batchProgressInfo.status === 'zipping'
+                        ? <Archive className="w-5 h-5 animate-pulse" />
+                        : <FileText className="w-5 h-5" />
+                    }
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider">
+                      {batchProgressInfo.status === 'done'
+                        ? '¡Descarga Completa!'
+                        : batchProgressInfo.status === 'zipping'
+                          ? 'Comprimiendo archivo...'
+                          : 'Generando Decretos'
+                      }
+                    </h3>
+                    <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider mt-0.5">
+                      GDP Cloud Engine v{CONFIG.APP_VERSION}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Progress counter */}
+                <div className="text-3xl font-black mb-3">
+                  {batchProgressInfo.current} <span className="text-base font-bold text-white/40">/ {batchProgressInfo.total}</span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-white rounded-full transition-all duration-300"
-                    style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                    className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${(batchProgressInfo.current / batchProgressInfo.total) * 100}%` }}
                   />
                 </div>
               </div>
-            ) : (
-              <button
-                onClick={handleBatchGenerate}
-                className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-600 rounded-xl text-xs font-black hover:bg-indigo-50 transition-colors"
-              >
-                <FileDown size={16} />
-                Generar {selectedIds.size} PDF{selectedIds.size > 1 ? 's' : ''}
-              </button>
-            )}
+            </div>
+
+            {/* Current file indicator */}
+            <div className="p-5">
+              {batchProgressInfo.status !== 'done' && batchProgressInfo.currentFile && (
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3.5 border border-slate-100 dark:border-slate-600/50">
+                  <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                    {batchProgressInfo.status === 'downloading' ? '⬇️ Descargando' : batchProgressInfo.status === 'zipping' ? '📦 Empaquetando' : '📄 Procesando'}
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">
+                    {batchProgressInfo.currentFile}
+                  </p>
+                </div>
+              )}
+
+              {/* Result summary */}
+              {batchProgressInfo.status === 'done' && batchProgressInfo.result && (
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-center border border-emerald-100 dark:border-emerald-800/50">
+                      <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{batchProgressInfo.result.success}</p>
+                      <p className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">Exitosos</p>
+                    </div>
+                    {batchProgressInfo.result.failed > 0 && (
+                      <div className="flex-1 bg-red-50 dark:bg-red-900/20 rounded-xl p-3 text-center border border-red-100 dark:border-red-800/50">
+                        <p className="text-lg font-black text-red-600 dark:text-red-400">{batchProgressInfo.result.failed}</p>
+                        <p className="text-[9px] font-bold text-red-500/70 uppercase tracking-widest">Con error</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Error list */}
+                  {batchProgressInfo.result.errors.length > 0 && (
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                      {batchProgressInfo.result.errors.map((err, idx) => (
+                        <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800/50">
+                          <AlertCircle size={12} className="text-red-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-red-700 dark:text-red-300 truncate">{err.decreto} — {err.funcionario}</p>
+                            <p className="text-[9px] text-red-500/70 truncate">{err.error}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center font-bold uppercase tracking-wider">
+                    Cerrando automáticamente...
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -227,7 +355,11 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
           placeholder="Buscar decreto, funcionario o RUT..."
           className="w-full pl-12 sm:pl-14 pr-4 sm:pr-6 py-3.5 sm:py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-lg outline-none focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/50 focus:border-indigo-200 dark:focus:border-indigo-700 transition-all font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-widest text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSearch(value);
+            onSearchTermChange?.(value);
+          }}
         />
       </div>
 
@@ -399,13 +531,13 @@ const PermitTable: React.FC<PermitTableProps> = ({ data, activeTab, onDelete, on
                       </div>
                     </td>
                     <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
-                       <span className={`font-black text-sm sm:text-[13px] ${getSaldo(record) < 0
-                         ? 'text-red-500 dark:text-red-400'
-                         : 'text-emerald-600 dark:text-emerald-400'
-                         }`}>
-                         {getSaldo(record).toFixed(1)}
-                       </span>
-                     </td>
+                      <span className={`font-black text-sm sm:text-[13px] ${getSaldo(record) < 0
+                        ? 'text-red-500 dark:text-red-400'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                        }`}>
+                        {getSaldo(record).toFixed(1)}
+                      </span>
+                    </td>
                     <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
                       <span className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate whitespace-nowrap">
                         {formatNumericDate(record.fechaInicio)}

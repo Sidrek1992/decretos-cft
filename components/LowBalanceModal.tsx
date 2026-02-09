@@ -1,6 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { PermitRecord } from '../types';
+import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { X, AlertTriangle, TrendingDown, User } from 'lucide-react';
 
 interface LowBalanceModalProps {
@@ -18,7 +19,7 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
             saldoFL: number | null;
         }> = {};
 
-        const sorted = [...records].sort((a, b) => b.createdAt - a.createdAt);
+        const sorted = [...records].sort((a, b) => compareRecordsByDateDesc(a, b));
 
         // Procesar PA — saldo final = diasHaber - cantidadDias del último registro
         const seenPA = new Set<string>();

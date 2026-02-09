@@ -20,8 +20,8 @@ export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[], enabled: boo
         for (const shortcut of shortcuts) {
             const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
             const ctrlMatch = shortcut.ctrlKey ? (event.ctrlKey || event.metaKey) : true;
-            const shiftMatch = shortcut.shiftKey ? event.shiftKey : !event.shiftKey;
-            const altMatch = shortcut.altKey ? event.altKey : !event.altKey;
+            const shiftMatch = shortcut.shiftKey === undefined ? true : shortcut.shiftKey === event.shiftKey;
+            const altMatch = shortcut.altKey === undefined ? true : shortcut.altKey === event.altKey;
 
             if (keyMatch && ctrlMatch && shiftMatch && altMatch) {
                 event.preventDefault();

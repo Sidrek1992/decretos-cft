@@ -13,11 +13,21 @@ interface DecreePreviewModalProps {
 const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose, record, onConfirm }) => {
     if (!isOpen || !record) return null;
 
+    const isFL = record.solicitudType === 'FL';
+    const saldoDisponibleP1 = record.saldoDisponibleP1 ?? 0;
+    const solicitadoP1 = record.solicitadoP1 ?? record.cantidadDias ?? 0;
+    const saldoFinalP1 = record.saldoFinalP1 ?? (saldoDisponibleP1 - solicitadoP1);
+    const saldoDisponibleP2 = record.saldoDisponibleP2 ?? 0;
+    const solicitadoP2 = record.solicitadoP2 ?? 0;
+    const saldoFinalP2 = record.saldoFinalP2 ?? (saldoDisponibleP2 - solicitadoP2);
+    const hasPeriod2 = Boolean(record.periodo2 && record.periodo2.trim() !== '');
+
     // Para FL, el saldo final es el Saldo Final del Periodo 2 (o P1 si no hay P2)
     // Para PA, es la resta simple de diasHaber - cantidadDias
-    const saldoFinal = record.solicitudType === 'FL'
-        ? (record.saldoFinalP2 || record.saldoFinalP1 || 0).toFixed(1)
-        : (record.diasHaber - record.cantidadDias).toFixed(1);
+    const saldoFinalValue = isFL
+        ? (hasPeriod2 ? saldoFinalP2 : saldoFinalP1)
+        : (record.diasHaber - record.cantidadDias);
+    const saldoFinal = saldoFinalValue.toFixed(1);
     const nombreProperCase = toProperCase(record.funcionario);
 
     return (
@@ -105,6 +115,20 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
                             </div>
                         </div>
 
+                        {isFL && (
+                            <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-2xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/50 rounded-xl flex items-center justify-center">
+                                        <Calendar className="w-5 h-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Fecha de Término</p>
+                                        <p className="font-bold text-slate-900 dark:text-white">{formatLongDate(record.fechaTermino || '')}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Cantidad de Días */}
                         <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-2xl">
                             <div className="flex items-center gap-3">
@@ -114,45 +138,105 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
                                 <div>
                                     <p className="text-[10px] text-slate-400 uppercase tracking-wider">Cantidad de Días</p>
                                     <p className="font-bold text-slate-900 dark:text-white">{record.cantidadDias} día(s)</p>
-                                    <p className="text-xs text-slate-500">{record.tipoJornada}</p>
+                                    <p className="text-xs text-slate-500">{isFL ? 'Feriado Legal' : record.tipoJornada}</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Jornada */}
+                        {/* Período */}
                         <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-2xl">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/50 rounded-xl flex items-center justify-center">
                                     <Building className="w-5 h-5 text-purple-600" />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">Período</p>
-                                    <p className="font-bold text-slate-900 dark:text-white">{record.periodo}</p>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">{isFL ? 'Período 1' : 'Período'}</p>
+                                    <p className="font-bold text-slate-900 dark:text-white">{isFL ? (record.periodo1 || '—') : record.periodo}</p>
                                 </div>
                             </div>
                         </div>
+
+                        {isFL && hasPeriod2 && (
+                            <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-2xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/50 rounded-xl flex items-center justify-center">
+                                        <Building className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Período 2</p>
+                                        <p className="font-bold text-slate-900 dark:text-white">{record.periodo2 || '—'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Saldo Information */}
                     <div className="mt-6 p-4 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-700 dark:to-slate-700/50 rounded-2xl border border-slate-200 dark:border-slate-600">
-                        <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider">Días Haber</p>
-                                <p className="text-xl sm:text-2xl font-black text-slate-600 dark:text-slate-300">{record.diasHaber}</p>
+                        {isFL ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="bg-white/70 dark:bg-slate-800/60 rounded-xl p-3">
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Período 1</p>
+                                    <div className="grid grid-cols-3 gap-2 text-center">
+                                        <div>
+                                            <p className="text-[9px] text-slate-400 uppercase tracking-wider">Disponible</p>
+                                            <p className="text-lg font-black text-slate-700 dark:text-slate-200">{saldoDisponibleP1.toFixed(1)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] text-slate-400 uppercase tracking-wider">Solicitado</p>
+                                            <p className="text-lg font-black text-indigo-600">-{solicitadoP1.toFixed(1)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] text-slate-400 uppercase tracking-wider">Saldo Final</p>
+                                            <p className={`text-lg font-black ${saldoFinalP1 < 0 ? 'text-red-500' : saldoFinalP1 < 2 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                                {saldoFinalP1.toFixed(1)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {hasPeriod2 && (
+                                    <div className="bg-white/70 dark:bg-slate-800/60 rounded-xl p-3">
+                                        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Período 2</p>
+                                        <div className="grid grid-cols-3 gap-2 text-center">
+                                            <div>
+                                                <p className="text-[9px] text-slate-400 uppercase tracking-wider">Disponible</p>
+                                                <p className="text-lg font-black text-slate-700 dark:text-slate-200">{saldoDisponibleP2.toFixed(1)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] text-slate-400 uppercase tracking-wider">Solicitado</p>
+                                                <p className="text-lg font-black text-indigo-600">-{solicitadoP2.toFixed(1)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] text-slate-400 uppercase tracking-wider">Saldo Final</p>
+                                                <p className={`text-lg font-black ${saldoFinalP2 < 0 ? 'text-red-500' : saldoFinalP2 < 2 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                                    {saldoFinalP2.toFixed(1)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider">Solicitados</p>
-                                <p className="text-xl sm:text-2xl font-black text-indigo-600">-{record.cantidadDias}</p>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                                <div>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">Días Haber</p>
+                                    <p className="text-xl sm:text-2xl font-black text-slate-600 dark:text-slate-300">{record.diasHaber}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">Solicitados</p>
+                                    <p className="text-xl sm:text-2xl font-black text-indigo-600">-{record.cantidadDias}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">Saldo Final</p>
+                                    <p className={`text-xl sm:text-2xl font-black ${parseFloat(saldoFinal) < 0 ? 'text-red-500' :
+                                            parseFloat(saldoFinal) < 2 ? 'text-amber-500' : 'text-emerald-500'
+                                        }`}>
+                                        {saldoFinal}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-wider">Saldo Final</p>
-                                <p className={`text-xl sm:text-2xl font-black ${parseFloat(saldoFinal) < 0 ? 'text-red-500' :
-                                        parseFloat(saldoFinal) < 2 ? 'text-amber-500' : 'text-emerald-500'
-                                    }`}>
-                                    {saldoFinal}
-                                </p>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* RA and Emite */}

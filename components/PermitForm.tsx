@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { PermitFormData, PermitRecord, Employee } from '../types';
+import { PermitFormData, PermitRecord, Employee, SolicitudType } from '../types';
 import { JORNADA_OPTIONS, SOLICITUD_TYPES } from '../constants';
 import { validateRut, validateDate, CONFIG } from '../config';
 import {
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { formatRut, toProperCase } from '../utils/formatters';
 import { extractDataFromPdf, extractFLDataFromPdf } from '../utils/aiProcessor';
+import { compareRecordsByDateDesc } from '../utils/recordDates';
 
 // Función para verificar si una fecha es fin de semana
 const isWeekend = (dateString: string): boolean => {
@@ -33,6 +34,8 @@ interface PermitFormProps {
   nextCorrelatives: { PA: string; FL: string };
   employees: Employee[];
   records: PermitRecord[];
+  requestedSolicitudType?: SolicitudType | null;
+  onRequestedSolicitudTypeHandled?: () => void;
 }
 
 interface FormErrors {
@@ -43,7 +46,16 @@ interface FormErrors {
   cantidadDias?: string;
 }
 
-const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCancelEdit, nextCorrelatives, employees, records }) => {
+const PermitForm: React.FC<PermitFormProps> = ({
+  onSubmit,
+  editingRecord,
+  onCancelEdit,
+  nextCorrelatives,
+  employees,
+  records,
+  requestedSolicitudType,
+  onRequestedSolicitudTypeHandled
+}) => {
   const currentYear = new Date().getFullYear();
   const defaultPeriodo1 = `${currentYear - 1}-${currentYear}`;
   const defaultPeriodo2 = `${currentYear}-${currentYear + 1}`;
@@ -121,6 +133,20 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
   }, [formData.solicitudType, nextCorrelatives, editingRecord]);
 
   useEffect(() => {
+    if (!requestedSolicitudType) return;
+    if (editingRecord) {
+      onRequestedSolicitudTypeHandled?.();
+      return;
+    }
+
+    setFormData(prev => {
+      if (prev.solicitudType === requestedSolicitudType) return prev;
+      return { ...prev, solicitudType: requestedSolicitudType };
+    });
+    onRequestedSolicitudTypeHandled?.();
+  }, [requestedSolicitudType, editingRecord, onRequestedSolicitudTypeHandled]);
+
+  useEffect(() => {
     if (skipAutoSaldoRef.current) {
       skipAutoSaldoRef.current = false;
       return;
@@ -129,7 +155,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
     if (!editingRecord && formData.rut) {
       const empRecords = records
         .filter(r => r.rut === formData.rut && r.solicitudType === formData.solicitudType)
-        .sort((a, b) => b.createdAt - a.createdAt);
+        .sort((a, b) => compareRecordsByDateDesc(a, b));
 
       if (empRecords.length > 0) {
         const last = empRecords[0];
@@ -317,11 +343,38 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
   const saldoFinalP1 = (formData.saldoDisponibleP1 || 0) - (formData.solicitadoP1 || 0);
   const saldoFinalP2 = (formData.saldoDisponibleP2 || 0) - (formData.solicitadoP2 || 0);
 
+  const parseDateValue = (value: string): Date | null => {
+    if (!value) return null;
+    const parsed = new Date(value + 'T12:00:00');
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const getDateRange = (payload: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>): { start: Date; end: Date } | null => {
+    const start = parseDateValue(payload.fechaInicio || '');
+    if (!start) return null;
+
+    let end: Date | null = null;
+    if (payload.solicitudType === 'FL' && payload.fechaTermino) {
+      end = parseDateValue(payload.fechaTermino) || null;
+    }
+
+    if (!end || end < start) {
+      const days = Math.max(Math.ceil(payload.cantidadDias || 1), 1);
+      end = new Date(start);
+      end.setDate(start.getDate() + days - 1);
+    }
+
+    return { start, end };
+  };
+
   // Función para detectar conflictos de fechas
-  const checkDateConflict = (fechaInicio: string, cantidadDias: number, rut: string, editingId?: string): PermitRecord | null => {
-    const startDate = new Date(fechaInicio + 'T12:00:00');
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + Math.ceil(cantidadDias) - 1);
+  const checkDateConflict = (
+    candidate: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>,
+    rut: string,
+    editingId?: string
+  ): PermitRecord | null => {
+    const candidateRange = getDateRange(candidate);
+    if (!candidateRange) return null;
 
     // Buscar registros del mismo funcionario
     const existingRecords = records.filter(r =>
@@ -332,12 +385,17 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
     for (const record of existingRecords) {
       if (!record.fechaInicio) continue;
 
-      const recordStart = new Date(record.fechaInicio + 'T12:00:00');
-      const recordEnd = new Date(recordStart);
-      recordEnd.setDate(recordStart.getDate() + Math.ceil(record.cantidadDias) - 1);
+      const recordRange = getDateRange({
+        solicitudType: record.solicitudType,
+        fechaInicio: record.fechaInicio,
+        fechaTermino: record.fechaTermino || '',
+        cantidadDias: record.cantidadDias,
+      });
+
+      if (!recordRange) continue;
 
       // Verificar overlap
-      const hasOverlap = startDate <= recordEnd && endDate >= recordStart;
+      const hasOverlap = candidateRange.start <= recordRange.end && candidateRange.end >= recordRange.start;
       if (hasOverlap) {
         return record;
       }
@@ -372,12 +430,12 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSubmit, editingRecord, onCanc
 
     // ★ VALIDACIÓN DE CONFLICTO DE FECHAS
     if (formData.fechaInicio && formData.rut) {
-      const conflictingRecord = checkDateConflict(
-        formData.fechaInicio,
-        formData.cantidadDias,
-        formData.rut,
-        editingRecord?.id
-      );
+      const conflictingRecord = checkDateConflict({
+        solicitudType: formData.solicitudType,
+        fechaInicio: formData.fechaInicio,
+        fechaTermino: formData.fechaTermino,
+        cantidadDias: formData.cantidadDias,
+      }, formData.rut, editingRecord?.id);
 
       if (conflictingRecord) {
         newErrors.fechaInicio = 'Conflicto de fechas';

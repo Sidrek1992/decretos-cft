@@ -9,6 +9,7 @@ import {
     BarChart3, Download, Clock, ArrowRight, Command, Hash
 } from 'lucide-react';
 import { PermitRecord, Employee } from '../types';
+import { compareRecordsByDateDesc } from '../utils/recordDates';
 
 // Tipos de comandos disponibles
 interface CommandItem {
@@ -112,6 +113,16 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             shortcut: 'E',
         },
         {
+            id: 'nav-settings',
+            type: 'navigation',
+            icon: <Settings className="w-4 h-4" />,
+            title: 'Configuración',
+            subtitle: 'Preferencias y administración',
+            keywords: ['configuracion', 'ajustes', 'settings', 'admin'],
+            action: () => { onNavigate('settings'); onClose(); },
+            shortcut: 'S',
+        },
+        {
             id: 'export-data',
             type: 'action',
             icon: <Download className="w-4 h-4" />,
@@ -141,7 +152,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     const recentDecreeCommands: CommandItem[] = useMemo(() =>
         records
             .slice()
-            .sort((a, b) => b.createdAt - a.createdAt)
+            .sort((a, b) => compareRecordsByDateDesc(a, b))
             .slice(0, 20)
             .map(r => ({
                 id: `rec-${r.id}`,

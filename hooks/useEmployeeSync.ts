@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Employee } from '../types';
 import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
+import { localBackup } from '../services/localBackup';
 
 const employeeLogger = logger.create('EmployeeSync');
 
@@ -29,6 +30,7 @@ export const useEmployeeSync = (
     const [lastSync, setLastSync] = useState<Date | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
+    const hasLoadedRef = useRef(false);
 
     // Cargar empleados desde el Sheet al iniciar
     useEffect(() => {
@@ -43,7 +45,20 @@ export const useEmployeeSync = (
     }, []);
 
     const fetchEmployeesFromCloud = useCallback(async () => {
-        if (!navigator.onLine) return;
+        if (!navigator.onLine) {
+            try {
+                const backupEmployees = await localBackup.getEmployees();
+                if (backupEmployees.length > 0) {
+                    setEmployees(backupEmployees);
+                    onSyncError?.('Modo offline: usando backup local de funcionarios');
+                }
+            } catch (backupError) {
+                employeeLogger.warn('No se pudo cargar backup local de empleados:', backupError);
+            } finally {
+                hasLoadedRef.current = true;
+            }
+            return;
+        }
 
         // Cancelar fetch anterior si existe
         if (abortControllerRef.current) {
@@ -93,6 +108,12 @@ export const useEmployeeSync = (
                 cloudEmployees.sort((a, b) => a.nombre.localeCompare(b.nombre));
                 setEmployees(cloudEmployees);
                 setLastSync(new Date());
+                hasLoadedRef.current = true;
+                try {
+                    await localBackup.saveEmployees(cloudEmployees);
+                } catch (backupError) {
+                    employeeLogger.warn('Error al guardar backup de empleados:', backupError);
+                }
                 employeeLogger.info(`Fetch completado: ${cloudEmployees.length} empleados`);
                 onSyncSuccess?.();
             }
@@ -104,11 +125,38 @@ export const useEmployeeSync = (
             }
             employeeLogger.error("Error al recuperar empleados de la nube:", e);
             setSyncError(true);
-            onSyncError?.("Error al conectar con la nube de empleados");
+            try {
+                const backupEmployees = await localBackup.getEmployees();
+                if (backupEmployees.length > 0) {
+                    setEmployees(backupEmployees);
+                    hasLoadedRef.current = true;
+                    onSyncError?.('Modo offline: usando backup local de funcionarios');
+                } else {
+                    onSyncError?.("Error al conectar con la nube de empleados");
+                }
+            } catch (backupError) {
+                employeeLogger.warn('Error al recuperar backup local de empleados:', backupError);
+                onSyncError?.("Error al conectar con la nube de empleados");
+            } finally {
+                hasLoadedRef.current = true;
+            }
         } finally {
             setIsSyncing(false);
         }
     }, [onSyncSuccess, onSyncError]);
+
+    useEffect(() => {
+        const persistBackup = async () => {
+            try {
+                if (!hasLoadedRef.current) return;
+                await localBackup.saveEmployees(employees);
+            } catch (backupError) {
+                employeeLogger.warn('Error al guardar backup de empleados:', backupError);
+            }
+        };
+
+        persistBackup();
+    }, [employees]);
 
     const syncEmployeesToCloud = useCallback(async (dataToSync: Employee[]): Promise<boolean> => {
         if (!navigator.onLine) {

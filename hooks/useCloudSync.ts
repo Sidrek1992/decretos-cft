@@ -9,6 +9,7 @@ import {
   prepareFLDataForSync,
 } from '../utils/parsers';
 import { localBackup } from '../services/localBackup';
+import { compareRecordsByDateDesc } from '../utils/recordDates';
 
 const syncLogger = logger.create('CloudSync');
 
@@ -46,6 +47,7 @@ export const useCloudSync = (
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDataRef = useRef<PermitRecord[] | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const hasLoadedRef = useRef(false);
 
   // Manejar estado de conexión
   useEffect(() => {
@@ -77,7 +79,26 @@ export const useCloudSync = (
   }, []);
 
   const fetchFromCloud = useCallback(async () => {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine) {
+      setSyncError(true);
+      try {
+        const backupRecords = await localBackup.getRecords();
+        if (backupRecords.length > 0) {
+          setRecords(backupRecords);
+          const lastBackupTime = await localBackup.getLastBackupTime();
+          syncLogger.info(`Recuperados ${backupRecords.length} registros desde backup local (offline)`);
+          onSyncError?.(`Modo offline: usando backup local (${lastBackupTime ? new Date(lastBackupTime).toLocaleTimeString() : 'fecha desconocida'})`);
+        } else {
+          onSyncError?.('Sin conexión a internet');
+        }
+      } catch (backupError) {
+        syncLogger.warn('Error al cargar backup local (offline):', backupError);
+        onSyncError?.('Sin conexión a internet');
+      } finally {
+        hasLoadedRef.current = true;
+      }
+      return;
+    }
 
     // Cancelar fetch anterior si existe
     if (abortControllerRef.current) {
@@ -99,8 +120,8 @@ export const useCloudSync = (
       ]);
 
       const [paResult, flResult] = await Promise.all([
-        paResponse.json(),
-        flResponse.json()
+        paResponse.ok ? paResponse.json() : { success: false, error: `HTTP ${paResponse.status}` },
+        flResponse.ok ? flResponse.json() : { success: false, error: `HTTP ${flResponse.status}` }
       ]);
 
       const allWarnings: string[] = [];
@@ -112,6 +133,8 @@ export const useCloudSync = (
         allRecords = [...allRecords, ...paRecords];
         allWarnings.push(...paWarnings);
         syncLogger.debug(`Procesados ${paRecords.length} registros PA`);
+      } else if (paResult?.error) {
+        allWarnings.push(`[PA] ${paResult.error}`);
       }
 
       // Procesar registros FL
@@ -120,14 +143,17 @@ export const useCloudSync = (
         allRecords = [...allRecords, ...flRecords];
         allWarnings.push(...flWarnings);
         syncLogger.debug(`Procesados ${flRecords.length} registros FL`);
+      } else if (flResult?.error) {
+        allWarnings.push(`[FL] ${flResult.error}`);
       }
 
-      // Ordenar por fecha de creación (más recientes primero)
-      allRecords.sort((a, b) => b.createdAt - a.createdAt);
+      // Ordenar por fecha (más recientes primero)
+      allRecords.sort((a, b) => compareRecordsByDateDesc(a, b));
 
       setRecords(allRecords);
       setSyncWarnings(allWarnings.slice(0, 20));
       setLastSync(new Date());
+      hasLoadedRef.current = true;
 
       // ★ Guardar backup local automáticamente
       try {
@@ -151,17 +177,20 @@ export const useCloudSync = (
       // ★ Intentar recuperar desde backup local
       try {
         const backupRecords = await localBackup.getRecords();
-        if (backupRecords.length > 0) {
-          setRecords(backupRecords);
-          const lastBackupTime = await localBackup.getLastBackupTime();
-          syncLogger.info(`Recuperados ${backupRecords.length} registros desde backup local`);
-          onSyncError?.(`Modo offline: usando backup local (${lastBackupTime ? new Date(lastBackupTime).toLocaleTimeString() : 'fecha desconocida'})`);
-        } else {
-          onSyncError?.("Error al conectar con la nube");
-        }
+          if (backupRecords.length > 0) {
+            setRecords(backupRecords);
+            hasLoadedRef.current = true;
+            const lastBackupTime = await localBackup.getLastBackupTime();
+            syncLogger.info(`Recuperados ${backupRecords.length} registros desde backup local`);
+            onSyncError?.(`Modo offline: usando backup local (${lastBackupTime ? new Date(lastBackupTime).toLocaleTimeString() : 'fecha desconocida'})`);
+          } else {
+            onSyncError?.("Error al conectar con la nube");
+          }
       } catch (backupError) {
         syncLogger.error('Error al recuperar backup local:', backupError);
         onSyncError?.("Error al conectar con la nube");
+      } finally {
+        hasLoadedRef.current = true;
       }
     } finally {
       setIsSyncing(false);
@@ -280,6 +309,20 @@ export const useCloudSync = (
       syncToCloud(pendingDataRef.current);
     }
   }, [isOnline, pendingSync, isSyncing, syncToCloud]);
+
+  // Guardar backup local cuando cambian los registros
+  useEffect(() => {
+    const persistBackup = async () => {
+      try {
+        if (!hasLoadedRef.current) return;
+        await localBackup.saveRecords(records);
+      } catch (backupError) {
+        syncLogger.warn('Error al guardar backup local:', backupError);
+      }
+    };
+
+    persistBackup();
+  }, [records]);
 
   // Función para agregar al stack de undo
   const pushToUndoStack = useCallback((currentRecords: PermitRecord[]) => {

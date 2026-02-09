@@ -329,6 +329,211 @@
   }
 }
 
+/* ============================================
+   ANIMACIONES DE NOTIFICACIONES Y UX
+   ============================================ */
+
+/* Bell ring animation */
+@keyframes bell-ring {
+  0% { transform: rotate(0deg); }
+  10% { transform: rotate(12deg); }
+  20% { transform: rotate(-10deg); }
+  30% { transform: rotate(8deg); }
+  40% { transform: rotate(-6deg); }
+  50% { transform: rotate(4deg); }
+  60% { transform: rotate(-2deg); }
+  70% { transform: rotate(1deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.notification-bell-ring {
+  animation: bell-ring 0.7s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* Badge pulse for critical notifications */
+@keyframes badge-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+}
+
+.notification-badge-pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* Notification Panel Enter */
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes panel-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px) scale(0.96);
+  }
+}
+
+.notification-panel-enter {
+  animation: panel-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.notification-panel-exit {
+  animation: panel-exit 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Backdrop animations */
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.notification-backdrop-enter {
+  animation: backdrop-enter 0.3s ease forwards;
+}
+
+.notification-backdrop-exit {
+  animation: backdrop-exit 0.25s ease forwards;
+}
+
+/* Notification group stagger entrance */
+@keyframes group-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-group-enter {
+  animation: group-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Toast animations - Enhanced */
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.9);
+    filter: blur(4px);
+  }
+  50% {
+    filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%) scale(0.9);
+    filter: blur(4px);
+  }
+}
+
+.toast-enter {
+  animation: toast-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast-exit {
+  animation: toast-exit 0.35s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Smooth hover lift effect for interactive cards */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Page transition */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-fade-in {
+  animation: page-fade-in 0.4s ease forwards;
+}
+
+/* Minimal loading dots */
+@keyframes dot-pulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.loading-dot {
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Scroll to top button */
+@keyframes scroll-top-enter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.scroll-top-enter {
+  animation: scroll-top-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Clase para ocultar solo en impresión */
 @media screen {
   .print-only {

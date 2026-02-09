@@ -8,6 +8,7 @@ import {
   Clock, Award, Edit3, Eye, XCircle, Upload, Save, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
+import { compareRecordsByDateDesc, getRecordDateValue } from '../utils/recordDates';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logger } from '../utils/logger';
 import EmployeeTimeline from './EmployeeTimeline';
@@ -91,19 +92,19 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
         .filter(r => r.solicitudType === 'FL')
         .reduce((sum, r) => sum + r.cantidadDias, 0);
 
-      const sortedDecrees = [...empRecords].sort((a, b) => b.createdAt - a.createdAt);
+      const sortedDecrees = [...empRecords].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
 
       // PA saldo: from the most recent PA record (diasHaber - cantidadDias)
       const lastPA = empRecords
         .filter(r => r.solicitudType === 'PA')
-        .sort((a, b) => b.createdAt - a.createdAt)[0];
+        .sort((a, b) => compareRecordsByDateDesc(a, b))[0];
       const diasHaber = lastPA ? lastPA.diasHaber : 6;
       const saldo = lastPA ? lastPA.diasHaber - lastPA.cantidadDias : 6;
 
       // FL saldo: from the most recent FL record (saldoFinalP2 ?? saldoFinalP1)
       const lastFL = empRecords
         .filter(r => r.solicitudType === 'FL')
-        .sort((a, b) => b.createdAt - a.createdAt)[0];
+        .sort((a, b) => compareRecordsByDateDesc(a, b))[0];
       const saldoFL = lastFL ? (lastFL.saldoFinalP2 ?? lastFL.saldoFinalP1 ?? 0) : 0;
 
       stats[emp.rut] = {
@@ -157,14 +158,15 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
         // Filtro por fecha
         if (dateFilter !== 'all') {
-          const lastDecreeDate = stats.lastDecree ? new Date(stats.lastDecree.fechaInicio) : null;
+          const lastDecreeDate = stats.lastDecree ? new Date(stats.lastDecree.fechaInicio + 'T12:00:00') : null;
 
           if (dateFilter === 'thisMonth') {
             if (!lastDecreeDate || lastDecreeDate.getMonth() !== thisMonth || lastDecreeDate.getFullYear() !== thisYear) return false;
           } else if (dateFilter === 'thisYear') {
             if (!lastDecreeDate || lastDecreeDate.getFullYear() !== thisYear) return false;
           } else if (dateFilter === 'noRecent') {
-            if (stats.lastDecree && stats.lastDecree.createdAt > threeMonthsAgo) return false;
+            const lastTime = stats.lastDecree ? getRecordDateValue(stats.lastDecree, 'fechaInicio') : null;
+            if (lastTime && lastTime > threeMonthsAgo) return false;
           }
         }
 
@@ -200,7 +202,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   }, [filteredEmployees, currentPage]);
 
   // Reset página cuando cambian filtros
-  useMemo(() => {
+  React.useEffect(() => {
     setCurrentPage(1);
   }, [search, balanceFilter, dateFilter]);
 
@@ -391,7 +393,9 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     if (stats.totalDecrees === 0) return 0;
     const oldestDecree = stats.decrees[stats.decrees.length - 1];
     if (!oldestDecree) return 0;
-    const months = Math.max(1, (Date.now() - oldestDecree.createdAt) / (1000 * 60 * 60 * 24 * 30));
+    const oldestTime = getRecordDateValue(oldestDecree, 'fechaInicio');
+    if (!oldestTime) return 0;
+    const months = Math.max(1, (Date.now() - oldestTime) / (1000 * 60 * 60 * 24 * 30));
     return stats.diasPA / months;
   };
 

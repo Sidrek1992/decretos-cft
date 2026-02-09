@@ -27,7 +27,7 @@ const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, reco
     const filteredRecords = useMemo(() => {
         return records.filter(r => {
             if (!r.fechaDecreto) return false;
-            const d = new Date(r.fechaDecreto);
+            const d = new Date(r.fechaDecreto + 'T12:00:00');
             return d.getFullYear() === selectedYear && d.getMonth() === selectedMonth &&
                 (selectedType === 'ALL' || r.solicitudType === selectedType);
         }).sort((a, b) => (parseInt(a.acto) || 0) - (parseInt(b.acto) || 0));
@@ -41,8 +41,13 @@ const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, reco
       th{background:#1e293b;color:#fff;padding:8px;text-align:left;font-size:9px}td{padding:6px;border-bottom:1px solid #e2e8f0}</style></head>
       <body><h1>Libro de Decretos - ${months[selectedMonth]} ${selectedYear}</h1>
       <table><tr><th>N°</th><th>Tipo</th><th>Funcionario</th><th>RUT</th><th>Días</th><th>Fecha</th><th>Saldo</th></tr>
-      ${filteredRecords.map(r => `<tr><td>${r.acto}</td><td>${r.solicitudType}</td><td>${r.funcionario}</td><td>${r.rut}</td>
-      <td>${r.cantidadDias}</td><td>${formatNumericDate(r.fechaInicio)}</td><td>${(r.diasHaber - r.cantidadDias).toFixed(1)}</td></tr>`).join('')}
+      ${filteredRecords.map(r => {
+        const saldoFinal = r.solicitudType === 'FL'
+          ? (r.saldoFinalP2 ?? r.saldoFinalP1 ?? 0)
+          : (r.diasHaber - r.cantidadDias);
+        return `<tr><td>${r.acto}</td><td>${r.solicitudType}</td><td>${r.funcionario}</td><td>${r.rut}</td>
+      <td>${r.cantidadDias}</td><td>${formatNumericDate(r.fechaInicio)}</td><td>${Number(saldoFinal).toFixed(1)}</td></tr>`;
+      }).join('')}
       </table></body></html>`;
         w.document.write(html);
         w.document.close();

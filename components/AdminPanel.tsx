@@ -102,7 +102,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 email: newEmail.trim(),
                 password: newPassword,
                 options: {
-                    emailRedirectTo: window.location.origin
+                    emailRedirectTo: window.location.origin,
+                    data: { role: newRole }
                 }
             });
 

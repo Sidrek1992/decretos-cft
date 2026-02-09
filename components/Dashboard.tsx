@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Users, Calendar, AlertTriangle, ChevronRight, FileDown, Loader2, Activity, Clock } from 'lucide-react';
 import { exportDashboardToPDF } from '../services/batchPdfGenerator';
+import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { CONFIG } from '../config';
 
 interface DashboardProps {
@@ -177,7 +178,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
         // Último registro por RUT por tipo → para saldo
         const lastByRutPA: Record<string, PermitRecord> = {};
         const lastByRutFL: Record<string, PermitRecord> = {};
-        const sortedByCreated = [...records].sort((a, b) => b.createdAt - a.createdAt);
+        const sortedByCreated = [...records].sort((a, b) => compareRecordsByDateDesc(a, b));
 
         sortedByCreated.forEach(r => {
             if (r.solicitudType === 'PA') {

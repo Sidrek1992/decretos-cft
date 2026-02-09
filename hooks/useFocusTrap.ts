@@ -21,6 +21,9 @@ interface UseFocusTrapReturn {
 const FOCUSABLE_SELECTOR = 
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+let scrollLockCount = 0;
+let originalOverflow: string | null = null;
+
 /**
  * Hook to trap focus within a container element.
  * Useful for modals, dialogs, and other overlay components.
@@ -54,9 +57,12 @@ export const useFocusTrap = ({
       // Save current focus
       previousFocusRef.current = document.activeElement as HTMLElement;
       
-      // Prevent body scroll
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
+      // Prevent body scroll (support nested modals)
+      if (scrollLockCount === 0) {
+        originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+      }
+      scrollLockCount += 1;
 
       // Set initial focus
       const setInitialFocus = () => {
@@ -85,7 +91,10 @@ export const useFocusTrap = ({
 
       return () => {
         clearTimeout(timeoutId);
-        document.body.style.overflow = originalOverflow;
+        scrollLockCount = Math.max(0, scrollLockCount - 1);
+        if (scrollLockCount === 0 && originalOverflow !== null) {
+          document.body.style.overflow = originalOverflow;
+        }
         
         // Restore focus
         if (restoreFocus && previousFocusRef.current) {

@@ -8,6 +8,9 @@ import NotificationCenter from './components/NotificationCenter';
 import ConfirmModal from './components/ConfirmModal';
 import LoginPage from './components/LoginPage';
 import AdminPanel from './components/AdminPanel';
+import CommandPalette from './components/CommandPalette';
+import ScrollToTop from './components/ScrollToTop';
+import WelcomeBanner from './components/WelcomeBanner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Lazy load heavy modals for better initial performance
@@ -20,10 +23,17 @@ const ThemeSelector = lazy(() => import('./components/ThemeSelector'));
 
 // Loading fallback component
 const ModalLoader = () => (
-  <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl">
-      <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto" />
-      <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-3">Cargando...</p>
+  <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/50 backdrop-blur-md notification-backdrop-enter">
+    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl page-fade-in">
+      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto shadow-lg">
+        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+      </div>
+      <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-4 text-center">Cargando</p>
+      <div className="flex justify-center gap-1.5 mt-2">
+        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full loading-dot" />
+        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full loading-dot" />
+        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full loading-dot" />
+      </div>
     </div>
   </div>
 );
@@ -66,6 +76,8 @@ const AppContent: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [requestedSolicitudType, setRequestedSolicitudType] = useState<SolicitudType | null>(null);
 
   // Hook centralizado para modales
   const { modals, openModal, closeModal } = useModals();
@@ -112,6 +124,26 @@ const AppContent: React.FC = () => {
     return calculateNextCorrelatives(records, year);
   }, [records]);
 
+  // Conteo de alertas críticas para el WelcomeBanner
+  const notifications_criticalCount = useMemo(() => {
+    let count = 0;
+    employees.forEach(emp => {
+      const paRecs = records.filter(r => r.rut === emp.rut && r.solicitudType === 'PA');
+      if (paRecs.length > 0) {
+        const sorted = [...paRecs].sort((a, b) => b.createdAt - a.createdAt);
+        const saldo = sorted[0].diasHaber - sorted[0].cantidadDias;
+        if (saldo <= 0) count++;
+      }
+      const flRecs = records.filter(r => r.rut === emp.rut && r.solicitudType === 'FL');
+      if (flRecs.length > 0) {
+        const sorted = [...flRecs].sort((a, b) => b.createdAt - a.createdAt);
+        const saldoFL = sorted[0].saldoFinalP2 ?? sorted[0].saldoFinalP1 ?? 0;
+        if (saldoFL <= 0) count++;
+      }
+    });
+    return count;
+  }, [records, employees]);
+
   const handleSubmit = (formData: PermitFormData) => {
     let updated: PermitRecord[];
     if (editingRecord) {
@@ -156,33 +188,64 @@ const AppContent: React.FC = () => {
     }, 100);
   };
 
+  const handleViewEmployeeFromNotification = (rut: string) => {
+    const match = employees.find(e => e.rut === rut);
+    setSearchFilter(match?.nombre || rut);
+    openModal('employeeList');
+  };
+
   const handleQuickDecree = (employee: Employee) => {
     // Preparar el formulario con el empleado seleccionado
     formRef.current?.scrollIntoView({ behavior: 'smooth' });
     toast.info('Nuevo decreto', `Preparando decreto para ${employee.nombre}`);
   };
 
+  const handleExportData = useCallback(async () => {
+    if (!permissions.canExportExcel) {
+      toast.warning('Sin permiso', 'Tu rol no permite exportar a Excel');
+      return;
+    }
+    const result = await exportToExcel(records);
+    if (result.success) {
+      toast.success('Exportado', 'Excel generado');
+    } else {
+      toast.error('Error', result.error || 'No se pudo exportar');
+    }
+  }, [permissions.canExportExcel, records, toast]);
+
+  const handleNewDecreeFromPalette = (type?: SolicitudType) => {
+    if (!permissions.canCreateDecree) {
+      toast.warning('Sin permiso', 'Tu rol no permite crear decretos');
+      return;
+    }
+    if (type) {
+      setRequestedSolicitudType(type);
+    }
+    formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    toast.info('Nuevo decreto', type ? `Preparando ${type === 'PA' ? 'Permiso Administrativo' : 'Feriado Legal'}` : 'Preparando nuevo decreto');
+  };
+
+  const handleSelectRecordFromPalette = (record: PermitRecord) => {
+    setActiveTab(record.solicitudType);
+    setSearchFilter(record.acto || record.funcionario);
+    setTimeout(() => {
+      document.querySelector('section.space-y-6')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
   // Atajos de teclado (memoizados para evitar re-renders)
   const shortcuts = useMemo(() => [
     { key: 'n', ctrlKey: true, action: () => formRef.current?.scrollIntoView({ behavior: 'smooth' }), description: 'Nuevo decreto' },
     { key: 's', ctrlKey: true, action: () => fetchFromCloud(), description: 'Sincronizar' },
-    {
-      key: 'e', ctrlKey: true, action: async () => {
-        const result = await exportToExcel(records);
-        if (result.success) {
-          toast.success('Exportado', 'Excel generado');
-        } else {
-          toast.error('Error', result.error || 'No se pudo exportar');
-        }
-      }, description: 'Exportar Excel'
-    },
+    { key: 'e', ctrlKey: true, action: handleExportData, description: 'Exportar Excel' },
     { key: 'd', ctrlKey: true, action: toggleDarkMode, description: 'Cambiar tema' },
     { key: 'b', ctrlKey: true, action: () => openModal('decreeBook'), description: 'Libro de decretos' },
     { key: 'g', ctrlKey: true, action: () => setShowDashboard(p => !p), description: 'Ver gráficos' },
     { key: 'c', ctrlKey: true, action: () => openModal('calendar'), description: 'Calendario' },
     { key: 'z', ctrlKey: true, action: handleUndo, description: 'Deshacer' },
+    { key: 'k', ctrlKey: true, action: () => setCommandPaletteOpen(true), description: 'Buscar comandos' },
     { key: '?', action: () => openModal('shortcuts'), description: 'Mostrar atajos' },
-  ], [fetchFromCloud, records, toast, toggleDarkMode, openModal, handleUndo]);
+  ], [fetchFromCloud, handleExportData, toggleDarkMode, openModal, handleUndo]);
 
   useKeyboardShortcuts(shortcuts);
 
@@ -320,14 +383,7 @@ const AppContent: React.FC = () => {
             <div className="hidden md:flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/20 rounded-lg px-1 py-0.5">
               {/* Excel */}
               <button
-                onClick={async () => {
-                  const result = await exportToExcel(records);
-                  if (result.success) {
-                    toast.success('Exportado', 'Archivo Excel generado correctamente');
-                  } else {
-                    toast.error('Error', result.error || 'No se pudo exportar el archivo');
-                  }
-                }}
+                onClick={handleExportData}
                 className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all active:scale-95"
                 title="Exportar a Excel"
               >
@@ -429,7 +485,11 @@ const AppContent: React.FC = () => {
               </button>
 
               {/* Notificaciones */}
-              <NotificationCenter records={records} employees={employees} />
+              <NotificationCenter
+                records={records}
+                employees={employees}
+                onViewEmployee={handleViewEmployeeFromNotification}
+              />
             </div>
 
             {/* Separador principal antes de sesión */}
@@ -479,7 +539,15 @@ const AppContent: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-10 sm:space-y-12">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8 sm:space-y-10 page-fade-in">
+        {/* Welcome Banner */}
+        <WelcomeBanner
+          userName={user?.email || undefined}
+          totalRecords={records.length}
+          totalEmployees={employees.length}
+          criticalAlerts={notifications_criticalCount}
+        />
+
         <StatsCards records={records} totalDatabaseEmployees={employees.length} />
 
         {/* Dashboard condicional (lazy loaded) */}
@@ -508,6 +576,8 @@ const AppContent: React.FC = () => {
                 nextCorrelatives={nextCorrelatives}
                 employees={employees}
                 records={records}
+                requestedSolicitudType={requestedSolicitudType}
+                onRequestedSolicitudTypeHandled={() => setRequestedSolicitudType(null)}
               />
             </section>
           )}
@@ -572,6 +642,8 @@ const AppContent: React.FC = () => {
               activeTab={activeTab}
               onDelete={handleDelete}
               onEdit={setEditingRecord}
+              searchTerm={searchFilter}
+              onSearchTermChange={setSearchFilter}
               canEdit={permissions.canEditDecree}
               canDelete={permissions.canDeleteDecree}
             />
@@ -657,6 +729,33 @@ const AppContent: React.FC = () => {
         onClose={() => setShowAdminPanel(false)}
       />
 
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        records={records}
+        employees={employees}
+        onNavigate={(view) => {
+          if (view === 'dashboard') {
+            setShowDashboard(true);
+          } else if (view === 'calendar') {
+            openModal('calendar');
+          } else if (view === 'employees') {
+            openModal('employeeList');
+          } else if (view === 'settings') {
+            if (role === 'admin') {
+              setShowAdminPanel(true);
+            } else {
+              openModal('themeSelector');
+            }
+          }
+        }}
+        onNewDecree={handleNewDecreeFromPalette}
+        onSelectEmployee={(employee) => handleFilterByEmployee(employee.nombre)}
+        onSelectRecord={handleSelectRecordFromPalette}
+        onExportData={handleExportData}
+      />
+
       {/* Footer */}
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 border-t border-slate-200 dark:border-slate-700 mt-16 sm:mt-20">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 sm:gap-8 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
@@ -692,6 +791,9 @@ const AppContent: React.FC = () => {
 
       {/* Toasts */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      {/* Scroll to Top */}
+      <ScrollToTop />
     </div>
   );
 };
@@ -704,9 +806,16 @@ const AuthenticatedApp: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto" />
-          <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-4">Verificando sesión...</p>
+        <div className="text-center page-fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto shadow-xl shadow-indigo-200 dark:shadow-indigo-900/50">
+            <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
+          </div>
+          <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-4">Verificando sesión</p>
+          <div className="flex justify-center gap-1.5 mt-2">
+            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full loading-dot" />
+            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full loading-dot" />
+            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full loading-dot" />
+          </div>
         </div>
       </div>
     );

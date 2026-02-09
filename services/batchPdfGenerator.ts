@@ -1,25 +1,39 @@
 /**
  * Servicio de Generación Masiva de PDFs
+ * Soporta:
+ * - Descarga individual progresiva (cada PDF se descarga apenas se genera)
+ * - Descarga masiva como ZIP
  */
 
 import { PermitRecord } from '../types';
 import { formatLongDate, formatSimpleDate, toProperCase } from '../utils/formatters';
 import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
+import JSZip from 'jszip';
 
 const batchLogger = logger.create('BatchPDF');
 
-interface BatchResult {
+export interface BatchResult {
   success: number;
   failed: number;
-  errors: { id: string; error: string }[];
+  errors: { id: string; decreto: string; funcionario: string; error: string }[];
+}
+
+export type BatchMode = 'individual' | 'zip';
+
+export interface BatchProgressInfo {
+  current: number;
+  total: number;
+  currentFile: string;
+  status: 'generating' | 'downloading' | 'zipping' | 'done' | 'error';
+  result?: BatchResult;
 }
 
 /**
  * Genera un PDF individual sin abrir ventana (modo silencioso)
- * Retorna el base64 del PDF para descarga directa
+ * Retorna el blob + nombre del archivo para descarga directa
  */
-const generatePDFSilent = async (record: PermitRecord): Promise<{ pdfBase64: string; fileName: string } | null> => {
+const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fileName: string } | null> => {
   const typeCode = record.solicitudType;
   const nombreMayuscula = record.funcionario.toUpperCase().trim();
   const nombreProperCase = toProperCase(record.funcionario);
@@ -79,195 +93,140 @@ const generatePDFSilent = async (record: PermitRecord): Promise<{ pdfBase64: str
   const result = await response.json();
 
   if (result.success && result.pdfBase64) {
-    return { pdfBase64: result.pdfBase64, fileName: finalFileName.replace(/\//g, '_') };
-  } else if (result.success && result.url) {
-    // Si no hay base64 pero hay URL, intentar obtener el PDF desde la URL
-    return null; // El servidor no devolvió el PDF en base64
+    const byteCharacters = atob(result.pdfBase64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'application/pdf' });
+    return { blob, fileName: finalFileName.replace(/\//g, '_') };
   }
 
-  throw new Error(result.error || 'Respuesta inválida');
+  throw new Error(result.error || 'El servidor no devolvió el PDF');
 };
 
 /**
- * Descarga un PDF desde base64
+ * Descarga un blob como archivo
  */
-const downloadPDFFromBase64 = (pdfBase64: string, fileName: string) => {
-  const byteCharacters = atob(pdfBase64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  const blob = new Blob([byteArray], { type: 'application/pdf' });
+const downloadBlob = (blob: Blob, fileName: string) => {
   const blobUrl = URL.createObjectURL(blob);
-
   const a = document.createElement('a');
   a.href = blobUrl;
-  a.download = `${fileName}.pdf`;
+  a.download = fileName;
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(blobUrl);
+
+  // Limpiar después de un breve delay
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  }, 500);
 };
 
 /**
- * Genera PDFs para múltiples registros
- * Abre una sola ventana con progreso y todos los enlaces de descarga al final
+ * Genera PDFs para múltiples registros con descarga individual progresiva
+ * Cada PDF se descarga automáticamente apenas se genera
  */
 export const generateBatchPDFs = async (
   records: PermitRecord[],
-  onProgress?: (current: number, total: number) => void
+  mode: BatchMode,
+  onProgress?: (info: BatchProgressInfo) => void
 ): Promise<BatchResult> => {
   const result: BatchResult = { success: 0, failed: 0, errors: [] };
   const total = records.length;
-  const generatedPDFs: { fileName: string; pdfBase64?: string; url?: string }[] = [];
+  const collectedPDFs: { blob: Blob; fileName: string }[] = [];
 
-  batchLogger.info(`Iniciando generación masiva de ${total} PDFs`);
-
-  // Abrir ventana de progreso
-  const progressWindow = window.open('about:blank', '_blank', 'width=650,height=600');
-  if (progressWindow) {
-    progressWindow.document.write(`
-      <html>
-      <head>
-        <title>GDP Cloud - Generando PDFs</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-          body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; padding: 40px; margin: 0; min-height: 100vh; box-sizing: border-box; }
-          .container { max-width: 550px; margin: 0 auto; }
-          h2 { text-transform: uppercase; letter-spacing: 0.15em; font-size: 11px; color: #64748b; margin-bottom: 20px; }
-          .progress-bar { background: #1e293b; border-radius: 12px; height: 24px; overflow: hidden; margin-bottom: 15px; }
-          .progress-fill { background: linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7); height: 100%; transition: width 0.3s ease; width: 0%; }
-          .status { font-size: 32px; font-weight: 900; margin-bottom: 5px; }
-          .current-file { font-size: 11px; color: #94a3b8; background: #1e293b; padding: 12px 16px; border-radius: 10px; margin-top: 15px; word-break: break-all; border: 1px solid #334155; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h2>⚡ GDP Cloud Engine v${CONFIG.APP_VERSION}</h2>
-          <div class="status" id="status">0 / ${total}</div>
-          <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
-          <div class="current-file" id="current">Iniciando generación masiva...</div>
-        </div>
-      </body>
-      </html>
-    `);
-  }
+  batchLogger.info(`Iniciando generación masiva de ${total} PDFs (modo: ${mode})`);
 
   // Procesar cada registro secuencialmente
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
+    const currentFile = `${record.solicitudType} ${record.acto} — ${record.funcionario}`;
 
-    // Actualizar ventana de progreso
-    if (progressWindow && !progressWindow.closed) {
-      try {
-        const percent = Math.round(((i + 1) / total) * 100);
-        const statusEl = progressWindow.document.getElementById('status');
-        const progressEl = progressWindow.document.getElementById('progress');
-        const currentEl = progressWindow.document.getElementById('current');
-
-        if (statusEl) statusEl.textContent = `${i + 1} / ${total}`;
-        if (progressEl) progressEl.style.width = `${percent}%`;
-        if (currentEl) currentEl.textContent = `📄 ${record.funcionario} — ${record.solicitudType} ${record.acto}`;
-      } catch { /* ventana cerrada */ }
-    }
+    onProgress?.({
+      current: i + 1,
+      total,
+      currentFile,
+      status: 'generating',
+    });
 
     try {
       const pdfData = await generatePDFSilent(record);
+
       if (pdfData) {
-        generatedPDFs.push(pdfData);
         result.success++;
-      } else {
-        result.success++;
+
+        if (mode === 'individual') {
+          // Descargar inmediatamente
+          onProgress?.({
+            current: i + 1,
+            total,
+            currentFile,
+            status: 'downloading',
+          });
+          downloadBlob(pdfData.blob, `${pdfData.fileName}.pdf`);
+        }
+
+        // Siempre recopilar para posible ZIP
+        collectedPDFs.push(pdfData);
       }
     } catch (error) {
       result.failed++;
-      result.errors.push({ id: record.id, error: error instanceof Error ? error.message : 'Error' });
+      result.errors.push({
+        id: record.id,
+        decreto: record.acto,
+        funcionario: record.funcionario,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      });
     }
 
-    if (onProgress) onProgress(i + 1, total);
-
-    // Pausa entre llamadas
+    // Pausa entre llamadas para no saturar la API
     if (i < records.length - 1) {
       await new Promise(resolve => setTimeout(resolve, 600));
     }
   }
 
+  // Si es modo ZIP, generar y descargar el archivo ZIP
+  if (mode === 'zip' && collectedPDFs.length > 0) {
+    onProgress?.({
+      current: total,
+      total,
+      currentFile: 'Comprimiendo archivos...',
+      status: 'zipping',
+    });
+
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder('Decretos-GDP');
+
+      collectedPDFs.forEach(pdf => {
+        folder?.file(`${pdf.fileName}.pdf`, pdf.blob);
+      });
+
+      const zipBlob = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      const today = new Date().toISOString().split('T')[0];
+      downloadBlob(zipBlob, `Decretos-GDP_${today}.zip`);
+    } catch (error) {
+      batchLogger.error('Error al generar ZIP:', error);
+    }
+  }
+
   batchLogger.info(`Completado: ${result.success} éxitos, ${result.failed} fallos`);
 
-  // Mostrar resultados finales
-  if (progressWindow && !progressWindow.closed) {
-    const pdfDataEntries = generatedPDFs.filter(p => p.pdfBase64).map((pdf, idx) =>
-      `pdfData["${idx}"] = { b64: "${pdf.pdfBase64}", name: "${pdf.fileName}" };`
-    ).join('\n');
-
-    const pdfListHtml = generatedPDFs.map((pdf, idx) => `
-      <div class="pdf-item">
-        <div class="pdf-icon">📄</div>
-        <div class="pdf-name">${pdf.fileName}</div>
-        <div class="pdf-actions">
-          ${pdf.pdfBase64 ? `<button class="btn btn-download" onclick="downloadPDF('${idx}')">⬇️ PDF</button>` : ''}
-          ${pdf.url ? `<a href="${pdf.url}" target="_blank" class="btn btn-drive">📂 Drive</a>` : ''}
-        </div>
-      </div>
-    `).join('');
-
-    const errorsHtml = result.errors.map(e => `
-      <div class="pdf-item error"><div class="pdf-icon">❌</div><div class="pdf-name">${e.error}</div></div>
-    `).join('');
-
-    progressWindow.document.body.innerHTML = `
-      <style>
-        body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; padding: 30px; margin: 0; }
-        .container { max-width: 580px; margin: 0 auto; }
-        h2 { text-transform: uppercase; letter-spacing: 0.15em; font-size: 11px; color: #64748b; margin-bottom: 10px; }
-        .summary { font-size: 36px; font-weight: 900; margin-bottom: 5px; color: #10b981; }
-        .summary-sub { font-size: 13px; color: #64748b; margin-bottom: 25px; }
-        .btn-all { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 25px; }
-        .btn-all:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3); }
-        .pdf-list { max-height: 300px; overflow-y: auto; }
-        .pdf-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e293b; border-radius: 10px; margin-bottom: 6px; border: 1px solid #334155; }
-        .pdf-item.error { border-color: #ef4444; }
-        .pdf-icon { font-size: 16px; }
-        .pdf-name { flex: 1; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .pdf-actions { display: flex; gap: 6px; flex-shrink: 0; }
-        .btn { padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 700; text-decoration: none; cursor: pointer; border: none; }
-        .btn-download { background: #ef4444; color: white; }
-        .btn-drive { background: #3b82f6; color: white; }
-        .close-btn { margin-top: 20px; padding: 10px 20px; background: #334155; color: #94a3b8; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 11px; }
-      </style>
-      <script>
-        var pdfData = {};
-        ${pdfDataEntries}
-        
-        function downloadPDF(idx) {
-          var d = pdfData[idx]; if (!d) return;
-          var bc = atob(d.b64), bn = new Array(bc.length);
-          for (var i = 0; i < bc.length; i++) bn[i] = bc.charCodeAt(i);
-          var blob = new Blob([new Uint8Array(bn)], {type: 'application/pdf'});
-          var url = URL.createObjectURL(blob);
-          var a = document.createElement('a'); a.href = url; a.download = d.name + '.pdf';
-          document.body.appendChild(a); a.click(); document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-        
-        function downloadAll() {
-          var keys = Object.keys(pdfData), i = 0;
-          function next() { if (i < keys.length) { downloadPDF(keys[i++]); setTimeout(next, 800); } }
-          next();
-        }
-      </script>
-      <div class="container">
-        <h2>⚡ GDP Cloud Engine</h2>
-        <div class="summary">✓ ${result.success} PDFs</div>
-        <div class="summary-sub">${result.failed > 0 ? `⚠️ ${result.failed} con errores` : 'Todos generados correctamente'}</div>
-        ${generatedPDFs.some(p => p.pdfBase64) ? `<button class="btn-all" onclick="downloadAll()">⬇️ Descargar Todos</button>` : '<p style="color:#f59e0b;font-size:12px;">⚠️ El servidor no devolvió los PDFs en base64. Revisa tu Google Apps Script.</p>'}
-        <div class="pdf-list">${pdfListHtml}${errorsHtml}</div>
-        <button class="close-btn" onclick="window.close()">Cerrar ventana</button>
-      </div>
-    `;
-  }
+  onProgress?.({
+    current: total,
+    total,
+    currentFile: '',
+    status: 'done',
+    result,
+  });
 
   return result;
 };

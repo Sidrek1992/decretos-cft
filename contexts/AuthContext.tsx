@@ -65,6 +65,13 @@ const getRoleFromEmail = (email: string | undefined): UserRole => {
     return roles[email.toLowerCase()] || 'reader';
 };
 
+const resolveRoleFromMetadata = (metadata: Record<string, unknown> | null | undefined): UserRole | null => {
+    if (!metadata) return null;
+    const rawRole = String(metadata.role || '').toLowerCase();
+    if (rawRole === 'admin' || rawRole === 'reader') return rawRole as UserRole;
+    return null;
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
@@ -72,7 +79,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     // Calcular rol basado en el perfil o email
-    const role: UserRole = profile?.role || getRoleFromEmail(user?.email);
+    const role: UserRole =
+        profile?.role ||
+        resolveRoleFromMetadata(user?.user_metadata as Record<string, unknown> | undefined) ||
+        getRoleFromEmail(user?.email);
     const permissions = getPermissions(role);
     const roleLabel = ROLE_LABELS[role];
     const roleColors = ROLE_COLORS[role];
