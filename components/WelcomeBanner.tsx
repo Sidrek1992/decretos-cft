@@ -6,6 +6,9 @@ interface WelcomeBannerProps {
     totalRecords: number;
     totalEmployees: number;
     criticalAlerts: number;
+    onClickDecrees?: () => void;
+    onClickEmployees?: () => void;
+    onClickUrgent?: () => void;
 }
 
 const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
@@ -13,6 +16,9 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
     totalRecords,
     totalEmployees,
     criticalAlerts,
+    onClickDecrees,
+    onClickEmployees,
+    onClickUrgent,
 }) => {
     const [isDismissed, setIsDismissed] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -81,19 +87,37 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
 
                     {/* Quick stats pills */}
                     <div className="flex flex-wrap gap-2 mt-3">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/80 dark:bg-slate-800/80 border border-slate-200/50 dark:border-slate-700/50 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                        <button
+                            type="button"
+                            onClick={onClickDecrees}
+                            title="Ver decretos"
+                            aria-label="Ver decretos"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/80 dark:bg-slate-800/80 border border-slate-200/50 dark:border-slate-700/50 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        >
                             <TrendingUp className="w-3 h-3 text-indigo-500" />
                             {totalRecords} decretos
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/80 dark:bg-slate-800/80 border border-slate-200/50 dark:border-slate-700/50 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onClickEmployees}
+                            title="Ver funcionarios"
+                            aria-label="Ver funcionarios"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/80 dark:bg-slate-800/80 border border-slate-200/50 dark:border-slate-700/50 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        >
                             <Shield className="w-3 h-3 text-emerald-500" />
                             {totalEmployees} funcionarios
-                        </span>
+                        </button>
                         {criticalAlerts > 0 && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-800/50 rounded-lg text-[10px] font-bold text-red-600 dark:text-red-400">
+                            <button
+                                type="button"
+                                onClick={onClickUrgent}
+                                title="Ver alertas urgentes"
+                                aria-label="Ver alertas urgentes"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-800/50 rounded-lg text-[10px] font-bold text-red-600 dark:text-red-400 hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
+                            >
                                 <Clock className="w-3 h-3" />
                                 {criticalAlerts} urgente{criticalAlerts > 1 ? 's' : ''}
-                            </span>
+                            </button>
                         )}
                     </div>
                 </div>

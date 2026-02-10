@@ -203,6 +203,18 @@ const AppContent: React.FC = () => {
     toast.info('Nuevo decreto', `Preparando decreto para ${employee.nombre}`);
   };
 
+  const handleViewDecreesFromWelcome = useCallback(() => {
+    document.querySelector('section.space-y-6')?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  const handleViewEmployeesFromWelcome = useCallback(() => {
+    openModal('employeeList');
+  }, [openModal]);
+
+  const handleViewUrgentFromWelcome = useCallback(() => {
+    openModal('lowBalance');
+  }, [openModal]);
+
   const handleExportData = useCallback(async () => {
     if (!permissions.canExportExcel) {
       toast.warning('Sin permiso', 'Tu rol no permite exportar a Excel');
@@ -576,6 +588,9 @@ const AppContent: React.FC = () => {
           totalRecords={records.length}
           totalEmployees={employees.length}
           criticalAlerts={notifications_criticalCount}
+          onClickDecrees={handleViewDecreesFromWelcome}
+          onClickEmployees={handleViewEmployeesFromWelcome}
+          onClickUrgent={handleViewUrgentFromWelcome}
         />
 
         <StatsCards records={records} totalDatabaseEmployees={employees.length} />
