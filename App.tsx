@@ -55,6 +55,8 @@ import {
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
+  const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
+
   // ★ Autenticación y Permisos
   const { user, signOut, permissions, role, roleLabel, roleColors } = useAuth();
 
@@ -273,6 +275,33 @@ const AppContent: React.FC = () => {
         : isOnline
           ? 'bg-emerald-500'
           : 'bg-red-500';
+
+  const welcomeUserName = useMemo(() => {
+    const metadata = user?.user_metadata as Record<string, unknown> | undefined;
+    const firstFromMetadata = String(metadata?.first_name || '').trim();
+    const lastFromMetadata = String(metadata?.last_name || '').trim();
+    const fullFromMetadata = `${firstFromMetadata} ${lastFromMetadata}`.trim();
+    if (fullFromMetadata) return fullFromMetadata;
+
+    const email = user?.email?.toLowerCase();
+    if (!email) return undefined;
+
+    try {
+      const raw = localStorage.getItem(USER_PROFILES_STORAGE_KEY);
+      if (raw) {
+        const profiles = JSON.parse(raw) as Record<string, { firstName?: string; lastName?: string }>;
+        const profile = profiles[email];
+        const firstName = String(profile?.firstName || '').trim();
+        const lastName = String(profile?.lastName || '').trim();
+        const fullName = `${firstName} ${lastName}`.trim();
+        if (fullName) return fullName;
+      }
+    } catch {
+      // ignore invalid local data
+    }
+
+    return user?.email;
+  }, [user]);
 
   return (
     <div className="min-h-screen">
@@ -543,7 +572,7 @@ const AppContent: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8 sm:space-y-10 page-fade-in">
         {/* Welcome Banner */}
         <WelcomeBanner
-          userName={user?.email || undefined}
+          userName={welcomeUserName}
           totalRecords={records.length}
           totalEmployees={employees.length}
           criticalAlerts={notifications_criticalCount}

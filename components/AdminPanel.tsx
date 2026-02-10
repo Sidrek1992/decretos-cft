@@ -29,11 +29,13 @@ interface ManagedUser {
     role: UserRole;
     firstName: string;
     lastName: string;
+    password: string;
     createdAt?: string;
 }
 
 const ROLES_STORAGE_KEY = 'gdp_user_roles';
 const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
+const USER_PASSWORDS_STORAGE_KEY = 'gdp_user_passwords';
 
 const loadUserRoles = (): Record<string, UserRole> => {
     try {
@@ -86,6 +88,31 @@ const saveUserProfiles = (profiles: UserProfileMap) => {
     }
 };
 
+type UserPasswordMap = Record<string, string>;
+
+const loadUserPasswords = (): UserPasswordMap => {
+    try {
+        const stored = localStorage.getItem(USER_PASSWORDS_STORAGE_KEY);
+        if (!stored) return {};
+        const parsed = JSON.parse(stored) as UserPasswordMap;
+        return Object.entries(parsed).reduce<UserPasswordMap>((acc, [email, password]) => {
+            acc[email.toLowerCase()] = String(password || '');
+            return acc;
+        }, {});
+    } catch (e) {
+        console.error('Error loading user passwords:', e);
+        return {};
+    }
+};
+
+const saveUserPasswords = (passwords: UserPasswordMap) => {
+    try {
+        localStorage.setItem(USER_PASSWORDS_STORAGE_KEY, JSON.stringify(passwords));
+    } catch (e) {
+        console.error('Error saving user passwords:', e);
+    }
+};
+
 export const getUserRole = (email: string): UserRole => {
     const roles = loadUserRoles();
     return roles[email.toLowerCase()] || 'reader';
@@ -115,6 +142,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
     const [isResettingByEmail, setIsResettingByEmail] = useState<Record<string, boolean>>({});
     const [profileDrafts, setProfileDrafts] = useState<Record<string, { firstName: string; lastName: string }>>({});
+    const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
+    const [showPasswordByEmail, setShowPasswordByEmail] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (isOpen) {
@@ -125,9 +154,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const loadUsers = () => {
         const roles = loadUserRoles();
         const profiles = loadUserProfiles();
+        const passwords = loadUserPasswords();
         const emails = new Set<string>([
             ...Object.keys(roles),
-            ...Object.keys(profiles)
+            ...Object.keys(profiles),
+            ...Object.keys(passwords)
         ]);
 
         const userList: ManagedUser[] = Array.from(emails)
@@ -138,7 +169,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     email,
                     role: roles[email] || 'reader',
                     firstName: profile.firstName,
-                    lastName: profile.lastName
+                    lastName: profile.lastName,
+                    password: passwords[email] || ''
                 };
             })
             .sort((a, b) => a.email.localeCompare(b.email));
@@ -153,6 +185,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             };
         });
         setProfileDrafts(drafts);
+
+        const passwordMap: Record<string, string> = {};
+        userList.forEach((user) => {
+            passwordMap[user.email] = user.password;
+        });
+        setPasswordDrafts(passwordMap);
     };
 
     const handleCreateUser = async () => {
@@ -201,6 +239,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             profiles[email] = { firstName, lastName };
             saveUserProfiles(profiles);
 
+            const passwords = loadUserPasswords();
+            passwords[email] = createPassword;
+            saveUserPasswords(passwords);
+
             loadUsers();
 
             setSuccess(`Usuario ${email} creado exitosamente como ${ROLE_LABELS[createRole]}`);
@@ -243,6 +285,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         delete profiles[email.toLowerCase()];
         saveUserProfiles(profiles);
 
+        const passwords = loadUserPasswords();
+        delete passwords[email.toLowerCase()];
+        saveUserPasswords(passwords);
+
         loadUsers();
         setSuccess(`Usuario ${email} eliminado de la gestión de roles`);
     };
@@ -274,6 +320,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const profiles = loadUserProfiles();
         profiles[email] = { firstName, lastName };
         saveUserProfiles(profiles);
+
+        const passwords = loadUserPasswords();
+        if (!passwords[email]) passwords[email] = '';
+        saveUserPasswords(passwords);
 
         loadUsers();
         setSuccess(`Usuario ${email} añadido como ${ROLE_LABELS[assignRole]}`);
@@ -331,6 +381,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         } finally {
             setIsResettingByEmail((prev) => ({ ...prev, [normalized]: false }));
         }
+    };
+
+    const handlePasswordDraftChange = (email: string, value: string) => {
+        setPasswordDrafts((prev) => ({ ...prev, [email]: value }));
+    };
+
+    const handleSavePasswordReference = (email: string) => {
+        const password = String(passwordDrafts[email] || '').trim();
+        if (password.length < 6) {
+            setError('La contraseña registrada debe tener al menos 6 caracteres');
+            return;
+        }
+
+        const passwords = loadUserPasswords();
+        passwords[email.toLowerCase()] = password;
+        saveUserPasswords(passwords);
+        loadUsers();
+        setSuccess(`Contraseña registrada actualizada para ${email}`);
+    };
+
+    const togglePasswordVisibility = (email: string) => {
+        setShowPasswordByEmail((prev) => ({ ...prev, [email]: !prev[email] }));
     };
 
     if (!isOpen) return null;
@@ -590,7 +662,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                         </button>
                                     </div>
 
-                                    <div className="flex justify-end">
+                                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
+                                        <div className="relative">
+                                            <input
+                                                type={showPasswordByEmail[user.email] ? 'text' : 'password'}
+                                                value={passwordDrafts[user.email] ?? ''}
+                                                onChange={(e) => handlePasswordDraftChange(user.email, e.target.value)}
+                                                placeholder="Contraseña registrada"
+                                                className="w-full px-3 py-2 pr-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => togglePasswordVisibility(user.email)}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                title={showPasswordByEmail[user.email] ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                            >
+                                                {showPasswordByEmail[user.email] ? <EyeOff size={16} /> : <Eye size={16} />}
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => handleSavePasswordReference(user.email)}
+                                            className="px-3 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"
+                                        >
+                                            <Save size={13} />
+                                            Guardar
+                                        </button>
                                         <button
                                             onClick={() => handleResetPassword(user.email)}
                                             disabled={Boolean(isResettingByEmail[user.email])}
@@ -604,10 +700,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                             ) : (
                                                 <>
                                                     <KeyRound className="w-4 h-4" />
-                                                    Restablecer contrasena
+                                                    Restablecer
                                                 </>
                                             )}
                                         </button>
+                                    </div>
+
+                                    <div className="flex justify-end">
+                                        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                                            El campo de contraseña se guarda en este panel para visualización administrativa.
+                                        </p>
                                     </div>
                                 </div>
                             ))}

@@ -49,10 +49,7 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
         });
     }, []);
 
-    const firstName = userName?.split('@')[0]?.split('.')[0];
-    const displayName = firstName
-        ? firstName.charAt(0).toUpperCase() + firstName.slice(1)
-        : null;
+    const displayName = userName?.trim() || null;
 
     if (isDismissed) return null;
 
