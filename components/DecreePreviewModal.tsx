@@ -2,6 +2,7 @@ import React from 'react';
 import { PermitRecord } from '../types';
 import { X, FileText, User, Calendar, Clock, Hash, Building, Award } from 'lucide-react';
 import { formatLongDate, formatSimpleDate, toProperCase } from '../utils/formatters';
+import { hasFLSecondPeriod } from '../utils/flBalance';
 
 interface DecreePreviewModalProps {
     isOpen: boolean;
@@ -20,7 +21,7 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
     const saldoDisponibleP2 = record.saldoDisponibleP2 ?? 0;
     const solicitadoP2 = record.solicitadoP2 ?? 0;
     const saldoFinalP2 = record.saldoFinalP2 ?? (saldoDisponibleP2 - solicitadoP2);
-    const hasPeriod2 = Boolean(record.periodo2 && record.periodo2.trim() !== '');
+    const hasPeriod2 = hasFLSecondPeriod(record);
 
     // Para FL, el saldo final es el Saldo Final del Periodo 2 (o P1 si no hay P2)
     // Para PA, es la resta simple de diasHaber - cantidadDias

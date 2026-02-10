@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Users, Shield, UserPlus, Trash2, Crown, Eye, Loader2, AlertCircle, CheckCircle, Mail } from 'lucide-react';
+import {
+    X,
+    Settings,
+    Users,
+    Shield,
+    UserPlus,
+    Trash2,
+    Crown,
+    Eye,
+    EyeOff,
+    Loader2,
+    AlertCircle,
+    CheckCircle,
+    Mail,
+    Save,
+    KeyRound
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { UserRole, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
 
@@ -11,13 +27,14 @@ interface AdminPanelProps {
 interface ManagedUser {
     email: string;
     role: UserRole;
+    firstName: string;
+    lastName: string;
     createdAt?: string;
 }
 
-// ★ Clave de localStorage para guardar roles
 const ROLES_STORAGE_KEY = 'gdp_user_roles';
+const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
 
-// ★ Cargar roles desde localStorage
 const loadUserRoles = (): Record<string, UserRole> => {
     try {
         const stored = localStorage.getItem(ROLES_STORAGE_KEY);
@@ -33,7 +50,6 @@ const loadUserRoles = (): Record<string, UserRole> => {
     };
 };
 
-// ★ Guardar roles en localStorage
 const saveUserRoles = (roles: Record<string, UserRole>) => {
     try {
         localStorage.setItem(ROLES_STORAGE_KEY, JSON.stringify(roles));
@@ -42,30 +58,64 @@ const saveUserRoles = (roles: Record<string, UserRole>) => {
     }
 };
 
-// ★ Exportar función para obtener rol de un email
+type UserProfileMap = Record<string, { firstName: string; lastName: string }>;
+
+const loadUserProfiles = (): UserProfileMap => {
+    try {
+        const stored = localStorage.getItem(USER_PROFILES_STORAGE_KEY);
+        if (!stored) return {};
+        const parsed = JSON.parse(stored) as UserProfileMap;
+        return Object.entries(parsed).reduce<UserProfileMap>((acc, [email, data]) => {
+            acc[email.toLowerCase()] = {
+                firstName: String(data?.firstName || '').trim(),
+                lastName: String(data?.lastName || '').trim()
+            };
+            return acc;
+        }, {});
+    } catch (e) {
+        console.error('Error loading user profiles:', e);
+        return {};
+    }
+};
+
+const saveUserProfiles = (profiles: UserProfileMap) => {
+    try {
+        localStorage.setItem(USER_PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+    } catch (e) {
+        console.error('Error saving user profiles:', e);
+    }
+};
+
 export const getUserRole = (email: string): UserRole => {
     const roles = loadUserRoles();
     return roles[email.toLowerCase()] || 'reader';
 };
 
-// ★ Exportar función para verificar si es admin
 export const isAdminEmail = (email: string): boolean => {
     return getUserRole(email) === 'admin';
 };
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [users, setUsers] = useState<ManagedUser[]>([]);
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
-    // Formulario para nuevo usuario
-    const [newEmail, setNewEmail] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [newRole, setNewRole] = useState<UserRole>('reader');
+    const [createFirstName, setCreateFirstName] = useState('');
+    const [createLastName, setCreateLastName] = useState('');
+    const [createEmail, setCreateEmail] = useState('');
+    const [createPassword, setCreatePassword] = useState('');
+    const [createRole, setCreateRole] = useState<UserRole>('reader');
+    const [showCreatePassword, setShowCreatePassword] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
 
-    // Cargar usuarios al abrir
+    const [assignFirstName, setAssignFirstName] = useState('');
+    const [assignLastName, setAssignLastName] = useState('');
+    const [assignEmail, setAssignEmail] = useState('');
+    const [assignRole, setAssignRole] = useState<UserRole>('reader');
+
+    const [isResettingByEmail, setIsResettingByEmail] = useState<Record<string, boolean>>({});
+    const [profileDrafts, setProfileDrafts] = useState<Record<string, { firstName: string; lastName: string }>>({});
+
     useEffect(() => {
         if (isOpen) {
             loadUsers();
@@ -74,20 +124,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
     const loadUsers = () => {
         const roles = loadUserRoles();
-        const userList: ManagedUser[] = Object.entries(roles).map(([email, role]) => ({
-            email,
-            role
-        }));
+        const profiles = loadUserProfiles();
+        const emails = new Set<string>([
+            ...Object.keys(roles),
+            ...Object.keys(profiles)
+        ]);
+
+        const userList: ManagedUser[] = Array.from(emails)
+            .map((rawEmail) => {
+                const email = rawEmail.toLowerCase();
+                const profile = profiles[email] || { firstName: '', lastName: '' };
+                return {
+                    email,
+                    role: roles[email] || 'reader',
+                    firstName: profile.firstName,
+                    lastName: profile.lastName
+                };
+            })
+            .sort((a, b) => a.email.localeCompare(b.email));
+
         setUsers(userList);
+
+        const drafts: Record<string, { firstName: string; lastName: string }> = {};
+        userList.forEach((user) => {
+            drafts[user.email] = {
+                firstName: user.firstName,
+                lastName: user.lastName
+            };
+        });
+        setProfileDrafts(drafts);
     };
 
     const handleCreateUser = async () => {
-        if (!newEmail.trim() || !newPassword.trim()) {
-            setError('Email y contraseña son requeridos');
+        if (!createFirstName.trim() || !createLastName.trim() || !createEmail.trim() || !createPassword.trim()) {
+            setError('Nombre, apellido, email y contraseña son requeridos');
             return;
         }
 
-        if (newPassword.length < 6) {
+        if (createPassword.length < 6) {
             setError('La contraseña debe tener al menos 6 caracteres');
             return;
         }
@@ -97,13 +171,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         setSuccess(null);
 
         try {
-            // Crear usuario en Supabase Auth
+            const email = createEmail.trim().toLowerCase();
+            const firstName = createFirstName.trim();
+            const lastName = createLastName.trim();
+
             const { data, error: signUpError } = await supabase.auth.signUp({
-                email: newEmail.trim(),
-                password: newPassword,
+                email,
+                password: createPassword,
                 options: {
                     emailRedirectTo: window.location.origin,
-                    data: { role: newRole }
+                    data: {
+                        role: createRole,
+                        first_name: firstName,
+                        last_name: lastName,
+                        full_name: `${firstName} ${lastName}`.trim()
+                    }
                 }
             });
 
@@ -111,18 +193,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 throw signUpError;
             }
 
-            // Guardar rol del nuevo usuario
             const roles = loadUserRoles();
-            roles[newEmail.trim().toLowerCase()] = newRole;
+            roles[email] = createRole;
             saveUserRoles(roles);
 
-            // Actualizar lista
+            const profiles = loadUserProfiles();
+            profiles[email] = { firstName, lastName };
+            saveUserProfiles(profiles);
+
             loadUsers();
 
-            setSuccess(`Usuario ${newEmail} creado exitosamente como ${ROLE_LABELS[newRole]}`);
-            setNewEmail('');
-            setNewPassword('');
-            setNewRole('reader');
+            setSuccess(`Usuario ${email} creado exitosamente como ${ROLE_LABELS[createRole]}`);
+            setCreateFirstName('');
+            setCreateLastName('');
+            setCreateEmail('');
+            setCreatePassword('');
+            setCreateRole('reader');
+            setShowCreatePassword(false);
         } catch (err: any) {
             if (err.message?.includes('already registered')) {
                 setError('Este email ya está registrado');
@@ -143,7 +230,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     };
 
     const handleRemoveUser = (email: string) => {
-        // No permitir eliminar el admin principal
         if (email.toLowerCase() === 'mguzmanahumada@gmail.com') {
             setError('No puedes eliminar al administrador principal');
             return;
@@ -152,28 +238,99 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const roles = loadUserRoles();
         delete roles[email.toLowerCase()];
         saveUserRoles(roles);
+
+        const profiles = loadUserProfiles();
+        delete profiles[email.toLowerCase()];
+        saveUserProfiles(profiles);
+
         loadUsers();
         setSuccess(`Usuario ${email} eliminado de la gestión de roles`);
     };
 
     const handleAddExistingUser = () => {
-        if (!newEmail.trim()) {
+        if (!assignEmail.trim()) {
             setError('Ingresa un email');
             return;
         }
 
+        if (!assignFirstName.trim() || !assignLastName.trim()) {
+            setError('Ingresa nombre y apellido del usuario');
+            return;
+        }
+
+        const email = assignEmail.trim().toLowerCase();
+        const firstName = assignFirstName.trim();
+        const lastName = assignLastName.trim();
+
         const roles = loadUserRoles();
-        if (roles[newEmail.trim().toLowerCase()]) {
+        if (roles[email]) {
             setError('Este usuario ya está en la lista');
             return;
         }
 
-        roles[newEmail.trim().toLowerCase()] = newRole;
+        roles[email] = assignRole;
         saveUserRoles(roles);
+
+        const profiles = loadUserProfiles();
+        profiles[email] = { firstName, lastName };
+        saveUserProfiles(profiles);
+
         loadUsers();
-        setSuccess(`Usuario ${newEmail} añadido como ${ROLE_LABELS[newRole]}`);
-        setNewEmail('');
-        setNewRole('reader');
+        setSuccess(`Usuario ${email} añadido como ${ROLE_LABELS[assignRole]}`);
+        setAssignFirstName('');
+        setAssignLastName('');
+        setAssignEmail('');
+        setAssignRole('reader');
+    };
+
+    const handleProfileDraftChange = (email: string, field: 'firstName' | 'lastName', value: string) => {
+        setProfileDrafts((prev) => ({
+            ...prev,
+            [email]: {
+                ...(prev[email] || { firstName: '', lastName: '' }),
+                [field]: value
+            }
+        }));
+    };
+
+    const handleSaveProfile = (email: string) => {
+        const draft = profileDrafts[email] || { firstName: '', lastName: '' };
+        const firstName = draft.firstName.trim();
+        const lastName = draft.lastName.trim();
+
+        if (!firstName || !lastName) {
+            setError('Nombre y apellido no pueden quedar vacíos');
+            return;
+        }
+
+        const profiles = loadUserProfiles();
+        profiles[email.toLowerCase()] = { firstName, lastName };
+        saveUserProfiles(profiles);
+        loadUsers();
+        setSuccess(`Datos actualizados para ${email}`);
+    };
+
+    const handleResetPassword = async (email: string) => {
+        const normalized = email.toLowerCase();
+        setError(null);
+        setSuccess(null);
+        setIsResettingByEmail((prev) => ({ ...prev, [normalized]: true }));
+
+        try {
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalized, {
+                redirectTo: `${window.location.origin}/reset-password`
+            });
+
+            if (resetError) {
+                throw resetError;
+            }
+
+            setSuccess(`Se envió un enlace de restablecimiento de contraseña a ${normalized}`);
+        } catch (err: any) {
+            setError(err.message || 'No se pudo iniciar el restablecimiento de contraseña');
+        } finally {
+            setIsResettingByEmail((prev) => ({ ...prev, [normalized]: false }));
+        }
     };
 
     if (!isOpen) return null;
@@ -240,14 +397,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                                    Nombre
+                                </label>
+                                <input
+                                    type="text"
+                                    value={createFirstName}
+                                    onChange={(e) => setCreateFirstName(e.target.value)}
+                                    placeholder="Ej: Juan"
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                                    Apellido
+                                </label>
+                                <input
+                                    type="text"
+                                    value={createLastName}
+                                    onChange={(e) => setCreateLastName(e.target.value)}
+                                    placeholder="Ej: Perez"
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                                     Email
                                 </label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <input
                                         type="email"
-                                        value={newEmail}
-                                        onChange={(e) => setNewEmail(e.target.value)}
+                                        value={createEmail}
+                                        onChange={(e) => setCreateEmail(e.target.value)}
                                         placeholder="usuario@email.com"
                                         className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     />
@@ -258,13 +441,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                                     Contraseña
                                 </label>
-                                <input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    placeholder="Mínimo 6 caracteres"
-                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showCreatePassword ? 'text' : 'password'}
+                                        value={createPassword}
+                                        onChange={(e) => setCreatePassword(e.target.value)}
+                                        placeholder="Mínimo 6 caracteres"
+                                        className="w-full pl-4 pr-11 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCreatePassword((prev) => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        title={showCreatePassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                    >
+                                        {showCreatePassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
                             </div>
 
                             <div>
@@ -272,8 +465,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                     Rol
                                 </label>
                                 <select
-                                    value={newRole}
-                                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                                    value={createRole}
+                                    onChange={(e) => setCreateRole(e.target.value as UserRole)}
                                     className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 >
                                     <option value="reader">Lector</option>
@@ -303,7 +496,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         </div>
 
                         <p className="text-xs text-slate-400 mt-3">
-                            El usuario recibirá un email de confirmación para activar su cuenta.
+                            Se creara el usuario con nombre, apellido y rol. Supabase enviara confirmacion por correo si esta habilitada.
                         </p>
                     </div>
 
@@ -321,51 +514,100 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             {users.map((user) => (
                                 <div
                                     key={user.email}
-                                    className="flex items-center justify-between p-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl"
+                                    className="p-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${user.role === 'admin'
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${user.role === 'admin'
                                                 ? 'bg-purple-100 dark:bg-purple-900/40'
                                                 : 'bg-slate-100 dark:bg-slate-800'
-                                            }`}>
-                                            {user.role === 'admin' ? (
-                                                <Crown className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                                            ) : (
-                                                <Eye className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                                            )}
+                                                }`}>
+                                                {user.role === 'admin' ? (
+                                                    <Crown className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                                ) : (
+                                                    <Eye className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                                                    {(user.firstName || user.lastName)
+                                                        ? `${user.firstName} ${user.lastName}`.trim()
+                                                        : 'Sin nombre configurado'}
+                                                </p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                                    {user.email}
+                                                </p>
+                                                <span className={`inline-flex mt-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${ROLE_COLORS[user.role].bg} ${ROLE_COLORS[user.role].text}`}>
+                                                    {ROLE_LABELS[user.role]}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-sm text-slate-900 dark:text-white">
-                                                {user.email}
-                                            </p>
-                                            <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${ROLE_COLORS[user.role].bg} ${ROLE_COLORS[user.role].text}`}>
-                                                {ROLE_LABELS[user.role]}
-                                            </span>
+
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={user.role}
+                                                onChange={(e) => handleChangeRole(user.email, e.target.value as UserRole)}
+                                                disabled={user.email.toLowerCase() === 'mguzmanahumada@gmail.com'}
+                                                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="reader">Lector</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+
+                                            {user.email.toLowerCase() !== 'mguzmanahumada@gmail.com' && (
+                                                <button
+                                                    onClick={() => handleRemoveUser(user.email)}
+                                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                                    title="Eliminar de la gestión"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
-                                        {/* Cambiar rol */}
-                                        <select
-                                            value={user.role}
-                                            onChange={(e) => handleChangeRole(user.email, e.target.value as UserRole)}
-                                            disabled={user.email.toLowerCase() === 'mguzmanahumada@gmail.com'}
-                                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+                                        <input
+                                            type="text"
+                                            value={profileDrafts[user.email]?.firstName ?? ''}
+                                            onChange={(e) => handleProfileDraftChange(user.email, 'firstName', e.target.value)}
+                                            placeholder="Nombre"
+                                            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={profileDrafts[user.email]?.lastName ?? ''}
+                                            onChange={(e) => handleProfileDraftChange(user.email, 'lastName', e.target.value)}
+                                            placeholder="Apellido"
+                                            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
+                                        />
+                                        <button
+                                            onClick={() => handleSaveProfile(user.email)}
+                                            className="px-3 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"
                                         >
-                                            <option value="reader">Lector</option>
-                                            <option value="admin">Admin</option>
-                                        </select>
+                                            <Save size={13} />
+                                            Guardar
+                                        </button>
+                                    </div>
 
-                                        {/* Eliminar */}
-                                        {user.email.toLowerCase() !== 'mguzmanahumada@gmail.com' && (
-                                            <button
-                                                onClick={() => handleRemoveUser(user.email)}
-                                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                                                title="Eliminar de la gestión"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => handleResetPassword(user.email)}
+                                            disabled={Boolean(isResettingByEmail[user.email])}
+                                            className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold flex items-center gap-2 disabled:opacity-60"
+                                        >
+                                            {isResettingByEmail[user.email] ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Enviando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <KeyRound className="w-4 h-4" />
+                                                    Restablecer contrasena
+                                                </>
+                                            )}
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -386,19 +628,35 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             <h3 className="font-black text-amber-800 dark:text-amber-300">Asignar Rol a Usuario Existente</h3>
                         </div>
                         <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">
-                            Si el usuario ya tiene cuenta en Supabase, añádelo aquí para asignarle un rol.
+                            Si el usuario ya tiene cuenta en Supabase, puedes registrarlo en este panel con su nombre, apellido y rol.
                         </p>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input
+                                type="text"
+                                value={assignFirstName}
+                                onChange={(e) => setAssignFirstName(e.target.value)}
+                                placeholder="Nombre"
+                                className="px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
+                            />
+                            <input
+                                type="text"
+                                value={assignLastName}
+                                onChange={(e) => setAssignLastName(e.target.value)}
+                                placeholder="Apellido"
+                                className="px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
+                            />
                             <input
                                 type="email"
-                                value={newEmail}
-                                onChange={(e) => setNewEmail(e.target.value)}
+                                value={assignEmail}
+                                onChange={(e) => setAssignEmail(e.target.value)}
                                 placeholder="email@existente.com"
-                                className="flex-1 px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
+                                className="sm:col-span-2 px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
                             />
+                        </div>
+                        <div className="flex gap-2 mt-2">
                             <select
-                                value={newRole}
-                                onChange={(e) => setNewRole(e.target.value as UserRole)}
+                                value={assignRole}
+                                onChange={(e) => setAssignRole(e.target.value as UserRole)}
                                 className="px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
                             >
                                 <option value="reader">Lector</option>
@@ -408,7 +666,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 onClick={handleAddExistingUser}
                                 className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-sm"
                             >
-                                Añadir
+                                Anadir
                             </button>
                         </div>
                     </div>

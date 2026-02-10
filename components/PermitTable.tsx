@@ -4,6 +4,7 @@ import { PermitRecord, SolicitudType } from '../types';
 import { Search, ArrowUpDown, ChevronUp, ChevronDown, UserCircle, LayoutGrid, CheckSquare, Square, FileDown, Loader2, X, Archive, Download, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
+import { getFLSaldoFinal } from '../utils/flBalance';
 import { generateDecretoPDF } from '../services/pdfGenerator';
 import { generateBatchPDFs, BatchMode, BatchProgressInfo } from '../services/batchPdfGenerator';
 import Pagination from './Pagination';
@@ -28,11 +29,11 @@ type SortOrder = 'asc' | 'desc';
 
 const emptyFilters: FilterState = { dateFrom: '', dateTo: '', minDays: '', maxDays: '', materia: '' };
 
-/** Saldo after the decree: PA uses diasHaber - cantidadDias; FL uses saldoFinalP2 ?? saldoFinalP1. */
-const getSaldo = (r: PermitRecord): number =>
-  r.solicitudType === 'FL'
-    ? (r.saldoFinalP2 ?? r.saldoFinalP1 ?? 0)
-    : r.diasHaber - r.cantidadDias;
+/** Saldo after the decree: PA uses diasHaber - cantidadDias; FL uses P1/P2 according to available periods. */
+const getSaldo = (r: PermitRecord): number => {
+  if (r.solicitudType !== 'FL') return r.diasHaber - r.cantidadDias;
+  return getFLSaldoFinal(r, 0);
+};
 
 const PermitTable: React.FC<PermitTableProps> = ({
   data,

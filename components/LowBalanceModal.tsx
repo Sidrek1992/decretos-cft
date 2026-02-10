@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { PermitRecord } from '../types';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
+import { getFLSaldoFinal } from '../utils/flBalance';
 import { X, AlertTriangle, TrendingDown, User } from 'lucide-react';
 
 interface LowBalanceModalProps {
@@ -33,15 +34,14 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
             }
         });
 
-        // Procesar FL — usar saldoFinalP2 si tiene 2 períodos, sino saldoFinalP1
+        // Procesar FL — usar saldo final según 1 o 2 períodos
         const seenFL = new Set<string>();
         sorted.filter(r => r.solicitudType === 'FL').forEach(r => {
             if (!seenFL.has(r.rut)) {
                 if (!balanceByEmployee[r.rut]) {
                     balanceByEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
                 }
-                const tiene2Periodos = r.periodo2 && r.periodo2.trim() !== '';
-                balanceByEmployee[r.rut].saldoFL = tiene2Periodos ? (r.saldoFinalP2 || 0) : (r.saldoFinalP1 || 0);
+                balanceByEmployee[r.rut].saldoFL = getFLSaldoFinal(r, 0);
                 seenFL.add(r.rut);
             }
         });

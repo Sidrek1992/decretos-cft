@@ -8,6 +8,7 @@ import {
 import { TrendingUp, TrendingDown, Users, Calendar, AlertTriangle, ChevronRight, FileDown, Loader2, Activity, Clock } from 'lucide-react';
 import { exportDashboardToPDF } from '../services/batchPdfGenerator';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
+import { getFLSaldoFinal } from '../utils/flBalance';
 import { CONFIG } from '../config';
 
 interface DashboardProps {
@@ -204,7 +205,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                 const lastFL = lastByRutFL[rut];
                 const saldoPA = lastPA ? (lastPA.diasHaber - lastPA.cantidadDias) : null;
                 const saldoFL = lastFL
-                    ? (lastFL.periodo2 && lastFL.periodo2.trim() !== '' ? (lastFL.saldoFinalP2 ?? null) : (lastFL.saldoFinalP1 ?? null))
+                    ? getFLSaldoFinal(lastFL, null)
                     : null;
                 return { ...emp, rut, saldoPA, saldoFL };
             })
@@ -219,8 +220,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
             }
         });
         Object.entries(lastByRutFL).forEach(([rut, r]) => {
-            const tiene2 = r.periodo2 && r.periodo2.trim() !== '';
-            const saldo = tiene2 ? (r.saldoFinalP2 || 0) : (r.saldoFinalP1 || 0);
+            const saldo = getFLSaldoFinal(r, 0);
             if (saldo < 2) {
                 lowBalance.push({ nombre: r.funcionario, rut, saldo, tipo: 'FL' });
             }

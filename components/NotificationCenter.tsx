@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PermitRecord, Employee } from '../types';
 import { compareRecordsByDateDesc, getRecordDateValue } from '../utils/recordDates';
+import { getFLSaldoFinal } from '../utils/flBalance';
 import {
     Bell, X, AlertTriangle, Calendar, User, ChevronRight, Clock, TrendingUp,
     Info, CheckCircle, AlertCircle, Zap, Shield, ChevronDown, Eye, EyeOff,
@@ -151,7 +152,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ records, employ
 
             if (flRecords.length > 0) {
                 const lastFL = flRecords[0];
-                const saldoFL = lastFL.saldoFinalP2 ?? lastFL.saldoFinalP1 ?? 0;
+                const saldoFL = getFLSaldoFinal(lastFL, 0);
 
                 if (saldoFL <= 0) {
                     newNotifications.push({

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { PermitRecord } from '../types';
 import { X, FileText, Download, Calendar, Printer } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
+import { getFLSaldoFinal } from '../utils/flBalance';
 
 interface DecreeBookModalProps {
     isOpen: boolean;
@@ -43,7 +44,7 @@ const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, reco
       <table><tr><th>N°</th><th>Tipo</th><th>Funcionario</th><th>RUT</th><th>Días</th><th>Fecha</th><th>Saldo</th></tr>
       ${filteredRecords.map(r => {
         const saldoFinal = r.solicitudType === 'FL'
-          ? (r.saldoFinalP2 ?? r.saldoFinalP1 ?? 0)
+          ? getFLSaldoFinal(r, 0)
           : (r.diasHaber - r.cantidadDias);
         return `<tr><td>${r.acto}</td><td>${r.solicitudType}</td><td>${r.funcionario}</td><td>${r.rut}</td>
       <td>${r.cantidadDias}</td><td>${formatNumericDate(r.fechaInicio)}</td><td>${Number(saldoFinal).toFixed(1)}</td></tr>`;

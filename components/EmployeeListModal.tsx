@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc, getRecordDateValue } from '../utils/recordDates';
+import { getFLSaldoFinal } from '../utils/flBalance';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logger } from '../utils/logger';
 import EmployeeTimeline from './EmployeeTimeline';
@@ -38,7 +39,7 @@ interface EmployeeStats {
   diasFL: number;
   diasHaber: number;
   saldo: number;    // PA saldo (diasHaber - cantidadDias of last PA record)
-  saldoFL: number;  // FL saldo (saldoFinalP2 ?? saldoFinalP1 of last FL record)
+  saldoFL: number;  // FL saldo (P1/P2 según períodos del último registro FL)
   lastDecree: PermitRecord | null;
   decrees: PermitRecord[];
 }
@@ -101,11 +102,11 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
       const diasHaber = lastPA ? lastPA.diasHaber : 6;
       const saldo = lastPA ? lastPA.diasHaber - lastPA.cantidadDias : 6;
 
-      // FL saldo: from the most recent FL record (saldoFinalP2 ?? saldoFinalP1)
+      // FL saldo: from the most recent FL record (P1/P2 según períodos)
       const lastFL = empRecords
         .filter(r => r.solicitudType === 'FL')
         .sort((a, b) => compareRecordsByDateDesc(a, b))[0];
-      const saldoFL = lastFL ? (lastFL.saldoFinalP2 ?? lastFL.saldoFinalP1 ?? 0) : 0;
+      const saldoFL = lastFL ? getFLSaldoFinal(lastFL, 0) : 0;
 
       stats[emp.rut] = {
         totalDecrees: empRecords.length,

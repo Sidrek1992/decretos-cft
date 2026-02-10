@@ -10,6 +10,7 @@ import {
 import { formatRut, toProperCase } from '../utils/formatters';
 import { extractDataFromPdf, extractFLDataFromPdf } from '../utils/aiProcessor';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
+import { getFLSaldoFinal } from '../utils/flBalance';
 
 // Función para verificar si una fecha es fin de semana
 const isWeekend = (dateString: string): boolean => {
@@ -166,11 +167,8 @@ const PermitForm: React.FC<PermitFormProps> = ({
           setFormData(prev => ({ ...prev, diasHaber: saldoPA }));
           setDetectedSaldo(saldoPA);
         } else {
-          // FL: tomar "Saldo Final Periodo 2" si tiene 2 períodos, sino "Saldo Final Periodo 1"
-          const tiene2Periodos = last.periodo2 && last.periodo2.trim() !== '';
-          const saldoFL = tiene2Periodos
-            ? (last.saldoFinalP2 || 0)
-            : (last.saldoFinalP1 || 0);
+          // FL: tomar saldo final según 1 o 2 períodos
+          const saldoFL = getFLSaldoFinal(last, 0);
           setFormData(prev => ({ ...prev, saldoDisponibleP1: saldoFL }));
           setDetectedSaldo(saldoFL);
         }

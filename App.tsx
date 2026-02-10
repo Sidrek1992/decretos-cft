@@ -47,6 +47,7 @@ import { useCloudSync } from './hooks/useCloudSync';
 import { useEmployeeSync } from './hooks/useEmployeeSync';
 import { useDarkMode } from './hooks/useDarkMode';
 import { calculateNextCorrelatives } from './utils/formatters';
+import { getFLSaldoFinal } from './utils/flBalance';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
@@ -137,7 +138,7 @@ const AppContent: React.FC = () => {
       const flRecs = records.filter(r => r.rut === emp.rut && r.solicitudType === 'FL');
       if (flRecs.length > 0) {
         const sorted = [...flRecs].sort((a, b) => b.createdAt - a.createdAt);
-        const saldoFL = sorted[0].saldoFinalP2 ?? sorted[0].saldoFinalP1 ?? 0;
+        const saldoFL = getFLSaldoFinal(sorted[0], 0);
         if (saldoFL <= 0) count++;
       }
     });
