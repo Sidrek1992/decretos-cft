@@ -5,7 +5,6 @@ import { Search, ArrowUpDown, ChevronUp, ChevronDown, UserCircle, LayoutGrid, Ch
 import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
-import { generateDecretoPDF } from '../services/pdfGenerator';
 import { generateBatchPDFs, BatchMode, BatchProgressInfo } from '../services/batchPdfGenerator';
 import Pagination from './Pagination';
 import ActionMenu from './ActionMenu';
@@ -178,9 +177,23 @@ const PermitTable: React.FC<PermitTableProps> = ({
       : <ChevronDown size={12} className="ml-auto text-indigo-500" />;
   }, [sortField, sortOrder]);
 
-  const handleGeneratePDF = useCallback((record: PermitRecord, forcePdf: boolean) => {
-    generateDecretoPDF(record, forcePdf);
-  }, []);
+  const handleGeneratePDF = useCallback(async (record: PermitRecord, _forcePdf: boolean) => {
+    if (isBatchGenerating) return;
+
+    setIsBatchGenerating(true);
+    setBatchProgressInfo({ current: 0, total: 1, currentFile: '', status: 'generating' });
+
+    try {
+      await generateBatchPDFs([record], 'individual', (info) => {
+        setBatchProgressInfo(info);
+      });
+    } finally {
+      setTimeout(() => {
+        setIsBatchGenerating(false);
+        setBatchProgressInfo(null);
+      }, 2500);
+    }
+  }, [isBatchGenerating]);
 
   const handlePreview = useCallback((record: PermitRecord) => {
     setPreviewRecord(record);
@@ -263,16 +276,9 @@ const PermitTable: React.FC<PermitTableProps> = ({
                     }
                   </div>
                   <div>
-                    <h3 className="text-sm font-black uppercase tracking-wider">
-                      {batchProgressInfo.status === 'done'
-                        ? '¡Descarga Completa!'
-                        : batchProgressInfo.status === 'zipping'
-                          ? 'Comprimiendo archivo...'
-                          : 'Generando Decretos'
-                      }
-                    </h3>
-                    <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider mt-0.5">
-                      GDP Cloud Engine v{CONFIG.APP_VERSION}
+                    <h3 className="text-sm font-black uppercase tracking-wider">GDP Cloud</h3>
+                    <p className="text-[10px] font-bold text-white/80 tracking-wide mt-0.5">
+                      Espere un momento se está generando el decreto
                     </p>
                   </div>
                 </div>
@@ -295,11 +301,11 @@ const PermitTable: React.FC<PermitTableProps> = ({
             {/* Current file indicator */}
             <div className="p-5">
               {batchProgressInfo.status !== 'done' && batchProgressInfo.currentFile && (
-                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3.5 border border-slate-100 dark:border-slate-600/50">
-                  <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3.5 border border-blue-200 dark:border-blue-800/40">
+                  <p className="text-[9px] font-black text-blue-600 dark:text-blue-300 uppercase tracking-widest mb-1">
                     {batchProgressInfo.status === 'downloading' ? '⬇️ Descargando' : batchProgressInfo.status === 'zipping' ? '📦 Empaquetando' : '📄 Procesando'}
                   </p>
-                  <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">
+                  <p className="text-[11px] font-bold text-blue-700 dark:text-blue-200 truncate">
                     {batchProgressInfo.currentFile}
                   </p>
                 </div>
@@ -308,10 +314,15 @@ const PermitTable: React.FC<PermitTableProps> = ({
               {/* Result summary */}
               {batchProgressInfo.status === 'done' && batchProgressInfo.result && (
                 <div className="space-y-3">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 border border-blue-200 dark:border-blue-800/40">
+                    <p className="text-[11px] font-bold text-blue-700 dark:text-blue-200 text-center">
+                      GDP Cloud - Espere un momento se está generando el decreto
+                    </p>
+                  </div>
                   <div className="flex gap-3">
-                    <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-center border border-emerald-100 dark:border-emerald-800/50">
-                      <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{batchProgressInfo.result.success}</p>
-                      <p className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest">Exitosos</p>
+                    <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center border border-blue-200 dark:border-blue-800/40">
+                      <p className="text-lg font-black text-blue-700 dark:text-blue-300">{batchProgressInfo.result.success}</p>
+                      <p className="text-[9px] font-bold text-blue-600/80 uppercase tracking-widest">Exitosos</p>
                     </div>
                     {batchProgressInfo.result.failed > 0 && (
                       <div className="flex-1 bg-red-50 dark:bg-red-900/20 rounded-xl p-3 text-center border border-red-100 dark:border-red-800/50">
