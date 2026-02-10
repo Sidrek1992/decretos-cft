@@ -23,7 +23,9 @@ interface UseCloudSyncReturn {
   syncWarnings: string[];
   pendingSync: boolean;
   isRetryScheduled: boolean;
+  moduleSync: Record<'PA' | 'FL', { status: 'idle' | 'syncing' | 'error'; lastSuccess: Date | null; lastError: string | null }>;
   fetchFromCloud: () => Promise<void>;
+  fetchModuleFromCloud: (module: 'PA' | 'FL') => Promise<void>;
   syncToCloud: (data: PermitRecord[]) => Promise<boolean>;
   undoStack: PermitRecord[][];
   undo: () => void;
@@ -43,6 +45,10 @@ export const useCloudSync = (
   const [syncWarnings, setSyncWarnings] = useState<string[]>([]);
   const [pendingSync, setPendingSync] = useState(false);
   const [isRetryScheduled, setIsRetryScheduled] = useState(false);
+  const [moduleSync, setModuleSync] = useState<Record<'PA' | 'FL', { status: 'idle' | 'syncing' | 'error'; lastSuccess: Date | null; lastError: string | null }>>({
+    PA: { status: 'idle', lastSuccess: null, lastError: null },
+    FL: { status: 'idle', lastSuccess: null, lastError: null }
+  });
 
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDataRef = useRef<PermitRecord[] | null>(null);
@@ -119,6 +125,12 @@ export const useCloudSync = (
         fetch(`${CONFIG.WEB_APP_URL_FL}?sheetId=${CONFIG.FERIADOS_SHEET_ID}`, { signal })
       ]);
 
+      setModuleSync(prev => ({
+        ...prev,
+        PA: { ...prev.PA, status: 'syncing', lastError: null },
+        FL: { ...prev.FL, status: 'syncing', lastError: null }
+      }));
+
       const [paResult, flResult] = await Promise.all([
         paResponse.ok ? paResponse.json() : { success: false, error: `HTTP ${paResponse.status}` },
         flResponse.ok ? flResponse.json() : { success: false, error: `HTTP ${flResponse.status}` }
@@ -133,8 +145,10 @@ export const useCloudSync = (
         allRecords = [...allRecords, ...paRecords];
         allWarnings.push(...paWarnings);
         syncLogger.debug(`Procesados ${paRecords.length} registros PA`);
+        setModuleSync(prev => ({ ...prev, PA: { status: 'idle', lastSuccess: new Date(), lastError: null } }));
       } else if (paResult?.error) {
         allWarnings.push(`[PA] ${paResult.error}`);
+        setModuleSync(prev => ({ ...prev, PA: { ...prev.PA, status: 'error', lastError: String(paResult.error) } }));
       }
 
       // Procesar registros FL
@@ -143,8 +157,10 @@ export const useCloudSync = (
         allRecords = [...allRecords, ...flRecords];
         allWarnings.push(...flWarnings);
         syncLogger.debug(`Procesados ${flRecords.length} registros FL`);
+        setModuleSync(prev => ({ ...prev, FL: { status: 'idle', lastSuccess: new Date(), lastError: null } }));
       } else if (flResult?.error) {
         allWarnings.push(`[FL] ${flResult.error}`);
+        setModuleSync(prev => ({ ...prev, FL: { ...prev.FL, status: 'error', lastError: String(flResult.error) } }));
       }
 
       // Ordenar por fecha (más recientes primero)
@@ -173,6 +189,10 @@ export const useCloudSync = (
       }
       syncLogger.error("Error al recuperar datos de la nube:", e);
       setSyncError(true);
+      setModuleSync(prev => ({
+        PA: { ...prev.PA, status: 'error', lastError: 'Falló la carga de PA' },
+        FL: { ...prev.FL, status: 'error', lastError: 'Falló la carga de FL' }
+      }));
 
       // ★ Intentar recuperar desde backup local
       try {
@@ -197,6 +217,54 @@ export const useCloudSync = (
     }
   }, [onSyncSuccess, onSyncError]);
 
+  const fetchModuleFromCloud = useCallback(async (module: 'PA' | 'FL') => {
+    if (!navigator.onLine) {
+      setSyncError(true);
+      return;
+    }
+
+    const endpoint = module === 'PA' ? CONFIG.WEB_APP_URL : CONFIG.WEB_APP_URL_FL;
+    const sheetId = module === 'PA' ? CONFIG.DECRETOS_SHEET_ID : CONFIG.FERIADOS_SHEET_ID;
+
+    setModuleSync(prev => ({
+      ...prev,
+      [module]: { ...prev[module], status: 'syncing', lastError: null }
+    }));
+
+    try {
+      const response = await fetch(`${endpoint}?sheetId=${sheetId}`);
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        throw new Error(result.error || `No fue posible sincronizar ${module}`);
+      }
+
+      const parsed = module === 'PA' ? parsePARecords(result.data) : parseFLRecords(result.data);
+      const incoming = parsed.records;
+
+      setRecords(prev => {
+        const kept = prev.filter(r => r.solicitudType !== module);
+        return [...kept, ...incoming].sort((a, b) => compareRecordsByDateDesc(a, b));
+      });
+
+      setModuleSync(prev => ({
+        ...prev,
+        [module]: { status: 'idle', lastSuccess: new Date(), lastError: null }
+      }));
+      setLastSync(new Date());
+      setSyncError(false);
+    } catch (e) {
+      setModuleSync(prev => ({
+        ...prev,
+        [module]: {
+          ...prev[module],
+          status: 'error',
+          lastError: e instanceof Error ? e.message : `Error de sincronización ${module}`
+        }
+      }));
+      setSyncError(true);
+    }
+  }, []);
+
   const syncToCloud = useCallback(async (dataToSync: PermitRecord[]): Promise<boolean> => {
     pendingDataRef.current = dataToSync;
     setPendingSync(true);
@@ -214,13 +282,19 @@ export const useCloudSync = (
 
     setIsSyncing(true);
     setSyncError(false);
+    let paData: unknown[] = [];
+    let flData: unknown[] = [];
 
     try {
       syncLogger.info('Iniciando sincronización a la nube...');
 
       // Preparar datos separados para PA y FL
-      const { data: paData, warnings: paWarnings } = preparePADataForSync(dataToSync);
-      const { data: flData, warnings: flWarnings } = prepareFLDataForSync(dataToSync);
+      const paPrepared = preparePADataForSync(dataToSync);
+      const flPrepared = prepareFLDataForSync(dataToSync);
+      paData = paPrepared.data;
+      flData = flPrepared.data;
+      const paWarnings = paPrepared.warnings;
+      const flWarnings = flPrepared.warnings;
 
       const allWarnings = [...paWarnings, ...flWarnings];
       setSyncWarnings(allWarnings.slice(0, 20));
@@ -229,6 +303,7 @@ export const useCloudSync = (
       const syncPromises: Promise<Response>[] = [];
 
       if (paData.length > 0) {
+        setModuleSync(prev => ({ ...prev, PA: { ...prev.PA, status: 'syncing', lastError: null } }));
         syncLogger.debug(`Sincronizando ${paData.length} registros PA`);
         syncPromises.push(
           fetch(CONFIG.WEB_APP_URL, {
@@ -245,6 +320,7 @@ export const useCloudSync = (
       }
 
       if (flData.length > 0) {
+        setModuleSync(prev => ({ ...prev, FL: { ...prev.FL, status: 'syncing', lastError: null } }));
         syncLogger.debug(`Sincronizando ${flData.length} registros FL`);
         syncPromises.push(
           fetch(CONFIG.WEB_APP_URL_FL, {
@@ -273,6 +349,10 @@ export const useCloudSync = (
       const allSuccess = results.every(result => result.success);
 
       if (allSuccess) {
+        setModuleSync(prev => ({
+          PA: paData.length > 0 ? { status: 'idle', lastSuccess: new Date(), lastError: null } : prev.PA,
+          FL: flData.length > 0 ? { status: 'idle', lastSuccess: new Date(), lastError: null } : prev.FL,
+        }));
         setLastSync(new Date());
         setPendingSync(false);
         setIsRetryScheduled(false);
@@ -290,6 +370,10 @@ export const useCloudSync = (
     } catch (e) {
       syncLogger.error("Error sincronizando:", e);
       setSyncError(true);
+      setModuleSync(prev => ({
+        PA: paData.length > 0 ? { ...prev.PA, status: 'error', lastError: 'Error al sincronizar PA' } : prev.PA,
+        FL: flData.length > 0 ? { ...prev.FL, status: 'error', lastError: 'Error al sincronizar FL' } : prev.FL,
+      }));
       onSyncError?.("Error al sincronizar con la nube");
 
       // Reintento automático
@@ -360,7 +444,9 @@ export const useCloudSync = (
     syncWarnings,
     pendingSync,
     isRetryScheduled,
+    moduleSync,
     fetchFromCloud,
+    fetchModuleFromCloud,
     syncToCloud,
     undoStack,
     undo,

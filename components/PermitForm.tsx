@@ -416,12 +416,43 @@ const PermitForm: React.FC<PermitFormProps> = ({
       else if (!validateDate(formData.fechaTermino)) newErrors.fechaTermino = 'Fecha inválida';
     }
 
-    // ★ VALIDACIÓN DE SALDO INSUFICIENTE (solo PA)
-    if (formData.solicitudType === 'PA' && !editingRecord) {
+    // ★ VALIDACIÓN DE SALDO INSUFICIENTE (PA)
+    if (formData.solicitudType === 'PA') {
       if (formData.cantidadDias > formData.diasHaber) {
         newErrors.cantidadDias = 'Saldo insuficiente';
         setFormError(`Saldo insuficiente: solicitas ${formData.cantidadDias} días pero solo tienes ${formData.diasHaber} disponibles.`);
         setErrors(newErrors);
+        return;
+      }
+    }
+
+    // ★ VALIDACIONES AVANZADAS FL
+    if (formData.solicitudType === 'FL') {
+      const hasPeriod2 = Boolean(formData.periodo2 && formData.periodo2.trim() !== '');
+      const saldoP1 = (formData.saldoDisponibleP1 || 0) - (formData.solicitadoP1 || 0);
+      const saldoP2 = (formData.saldoDisponibleP2 || 0) - (formData.solicitadoP2 || 0);
+
+      if (!formData.periodo1 || !formData.periodo1.trim()) {
+        setFormError('El período 1 es obligatorio para Feriado Legal.');
+        setErrors({ ...newErrors, fechaInicio: 'Periodo 1 requerido' });
+        return;
+      }
+
+      if (!hasPeriod2 && ((formData.solicitadoP2 || 0) > 0 || (formData.saldoDisponibleP2 || 0) > 0)) {
+        setFormError('Si no hay Período 2, los campos de Período 2 deben quedar en 0.');
+        setErrors({ ...newErrors, cantidadDias: 'Período 2 inconsistente' });
+        return;
+      }
+
+      if (formData.fechaInicio && formData.fechaTermino && formData.fechaTermino < formData.fechaInicio) {
+        setFormError('La fecha de término no puede ser anterior a la fecha de inicio.');
+        setErrors({ ...newErrors, fechaTermino: 'Rango inválido' });
+        return;
+      }
+
+      if (saldoP1 < 0 || (hasPeriod2 && saldoP2 < 0)) {
+        setFormError(`Saldo FL insuficiente. Resultado: P1 ${saldoP1.toFixed(1)}${hasPeriod2 ? ` | P2 ${saldoP2.toFixed(1)}` : ''}.`);
+        setErrors({ ...newErrors, cantidadDias: 'Saldo FL insuficiente' });
         return;
       }
     }

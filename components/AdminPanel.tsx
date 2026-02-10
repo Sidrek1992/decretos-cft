@@ -14,10 +14,24 @@ import {
     CheckCircle,
     Mail,
     Save,
-    KeyRound
+    KeyRound,
+    ShieldAlert,
+    Clock3
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { UserRole, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
+import {
+    loadUserRoles,
+    saveUserRoles,
+    loadUserProfiles,
+    saveUserProfiles,
+    loadUserPasswords,
+    saveUserPasswords,
+    loadUserSecurity,
+    saveUserSecurity,
+    updateUserSecurity
+} from '../utils/userAdminStorage';
+import { appendAuditLog, getAuditLog } from '../utils/audit';
 
 interface AdminPanelProps {
     isOpen: boolean;
@@ -30,88 +44,12 @@ interface ManagedUser {
     firstName: string;
     lastName: string;
     password: string;
+    blocked: boolean;
+    forcePasswordChange: boolean;
+    lastAccessAt: number | null;
     createdAt?: string;
 }
 
-const ROLES_STORAGE_KEY = 'gdp_user_roles';
-const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
-const USER_PASSWORDS_STORAGE_KEY = 'gdp_user_passwords';
-
-const loadUserRoles = (): Record<string, UserRole> => {
-    try {
-        const stored = localStorage.getItem(ROLES_STORAGE_KEY);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-    } catch (e) {
-        console.error('Error loading roles:', e);
-    }
-    // Por defecto, el admin principal
-    return {
-        'mguzmanahumada@gmail.com': 'admin'
-    };
-};
-
-const saveUserRoles = (roles: Record<string, UserRole>) => {
-    try {
-        localStorage.setItem(ROLES_STORAGE_KEY, JSON.stringify(roles));
-    } catch (e) {
-        console.error('Error saving roles:', e);
-    }
-};
-
-type UserProfileMap = Record<string, { firstName: string; lastName: string }>;
-
-const loadUserProfiles = (): UserProfileMap => {
-    try {
-        const stored = localStorage.getItem(USER_PROFILES_STORAGE_KEY);
-        if (!stored) return {};
-        const parsed = JSON.parse(stored) as UserProfileMap;
-        return Object.entries(parsed).reduce<UserProfileMap>((acc, [email, data]) => {
-            acc[email.toLowerCase()] = {
-                firstName: String(data?.firstName || '').trim(),
-                lastName: String(data?.lastName || '').trim()
-            };
-            return acc;
-        }, {});
-    } catch (e) {
-        console.error('Error loading user profiles:', e);
-        return {};
-    }
-};
-
-const saveUserProfiles = (profiles: UserProfileMap) => {
-    try {
-        localStorage.setItem(USER_PROFILES_STORAGE_KEY, JSON.stringify(profiles));
-    } catch (e) {
-        console.error('Error saving user profiles:', e);
-    }
-};
-
-type UserPasswordMap = Record<string, string>;
-
-const loadUserPasswords = (): UserPasswordMap => {
-    try {
-        const stored = localStorage.getItem(USER_PASSWORDS_STORAGE_KEY);
-        if (!stored) return {};
-        const parsed = JSON.parse(stored) as UserPasswordMap;
-        return Object.entries(parsed).reduce<UserPasswordMap>((acc, [email, password]) => {
-            acc[email.toLowerCase()] = String(password || '');
-            return acc;
-        }, {});
-    } catch (e) {
-        console.error('Error loading user passwords:', e);
-        return {};
-    }
-};
-
-const saveUserPasswords = (passwords: UserPasswordMap) => {
-    try {
-        localStorage.setItem(USER_PASSWORDS_STORAGE_KEY, JSON.stringify(passwords));
-    } catch (e) {
-        console.error('Error saving user passwords:', e);
-    }
-};
 
 export const getUserRole = (email: string): UserRole => {
     const roles = loadUserRoles();
@@ -144,6 +82,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [profileDrafts, setProfileDrafts] = useState<Record<string, { firstName: string; lastName: string }>>({});
     const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
     const [showPasswordByEmail, setShowPasswordByEmail] = useState<Record<string, boolean>>({});
+    const [adminAuditEntries, setAdminAuditEntries] = useState(() => getAuditLog().slice(0, 30));
 
     useEffect(() => {
         if (isOpen) {
@@ -155,22 +94,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const roles = loadUserRoles();
         const profiles = loadUserProfiles();
         const passwords = loadUserPasswords();
+        const security = loadUserSecurity();
         const emails = new Set<string>([
             ...Object.keys(roles),
             ...Object.keys(profiles),
-            ...Object.keys(passwords)
+            ...Object.keys(passwords),
+            ...Object.keys(security)
         ]);
 
         const userList: ManagedUser[] = Array.from(emails)
             .map((rawEmail) => {
                 const email = rawEmail.toLowerCase();
                 const profile = profiles[email] || { firstName: '', lastName: '' };
+                const sec = security[email] || { blocked: false, forcePasswordChange: false, lastAccessAt: null };
                 return {
                     email,
                     role: roles[email] || 'reader',
                     firstName: profile.firstName,
                     lastName: profile.lastName,
-                    password: passwords[email] || ''
+                    password: passwords[email] || '',
+                    blocked: Boolean(sec.blocked),
+                    forcePasswordChange: Boolean(sec.forcePasswordChange),
+                    lastAccessAt: sec.lastAccessAt ?? null
                 };
             })
             .sort((a, b) => a.email.localeCompare(b.email));
@@ -191,6 +136,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             passwordMap[user.email] = user.password;
         });
         setPasswordDrafts(passwordMap);
+        setAdminAuditEntries(getAuditLog().slice(0, 30));
     };
 
     const handleCreateUser = async () => {
@@ -213,7 +159,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             const firstName = createFirstName.trim();
             const lastName = createLastName.trim();
 
-            const { data, error: signUpError } = await supabase.auth.signUp({
+            const { error: signUpError } = await supabase.auth.signUp({
                 email,
                 password: createPassword,
                 options: {
@@ -243,6 +189,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             passwords[email] = createPassword;
             saveUserPasswords(passwords);
 
+            const security = loadUserSecurity();
+            security[email] = { blocked: false, forcePasswordChange: false, lastAccessAt: null };
+            saveUserSecurity(security);
+
+            appendAuditLog({
+                scope: 'admin',
+                action: 'create_user',
+                actor: 'admin',
+                target: email,
+                details: `Creado con rol ${createRole}`
+            });
+
             loadUsers();
 
             setSuccess(`Usuario ${email} creado exitosamente como ${ROLE_LABELS[createRole]}`);
@@ -267,6 +225,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const roles = loadUserRoles();
         roles[email.toLowerCase()] = newRole;
         saveUserRoles(roles);
+        appendAuditLog({
+            scope: 'admin',
+            action: 'change_role',
+            actor: 'admin',
+            target: email,
+            details: `Rol actualizado a ${newRole}`
+        });
         loadUsers();
         setSuccess(`Rol de ${email} cambiado a ${ROLE_LABELS[newRole]}`);
     };
@@ -288,6 +253,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const passwords = loadUserPasswords();
         delete passwords[email.toLowerCase()];
         saveUserPasswords(passwords);
+
+        const security = loadUserSecurity();
+        delete security[email.toLowerCase()];
+        saveUserSecurity(security);
+
+        appendAuditLog({
+            scope: 'admin',
+            action: 'remove_user',
+            actor: 'admin',
+            target: email,
+            details: 'Usuario eliminado del panel'
+        });
 
         loadUsers();
         setSuccess(`Usuario ${email} eliminado de la gestión de roles`);
@@ -325,6 +302,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         if (!passwords[email]) passwords[email] = '';
         saveUserPasswords(passwords);
 
+        const security = loadUserSecurity();
+        if (!security[email]) security[email] = { blocked: false, forcePasswordChange: false, lastAccessAt: null };
+        saveUserSecurity(security);
+
+        appendAuditLog({
+            scope: 'admin',
+            action: 'add_existing_user',
+            actor: 'admin',
+            target: email,
+            details: `Asignado como ${assignRole}`
+        });
+
         loadUsers();
         setSuccess(`Usuario ${email} añadido como ${ROLE_LABELS[assignRole]}`);
         setAssignFirstName('');
@@ -356,6 +345,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const profiles = loadUserProfiles();
         profiles[email.toLowerCase()] = { firstName, lastName };
         saveUserProfiles(profiles);
+        appendAuditLog({
+            scope: 'admin',
+            action: 'update_profile',
+            actor: 'admin',
+            target: email,
+            details: `Nombre actualizado a ${firstName} ${lastName}`
+        });
         loadUsers();
         setSuccess(`Datos actualizados para ${email}`);
     };
@@ -374,6 +370,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             if (resetError) {
                 throw resetError;
             }
+
+            updateUserSecurity(normalized, { forcePasswordChange: false });
+            appendAuditLog({
+                scope: 'admin',
+                action: 'reset_password_email',
+                actor: 'admin',
+                target: normalized,
+                details: 'Envio de email de restablecimiento'
+            });
 
             setSuccess(`Se envió un enlace de restablecimiento de contraseña a ${normalized}`);
         } catch (err: any) {
@@ -397,12 +402,47 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const passwords = loadUserPasswords();
         passwords[email.toLowerCase()] = password;
         saveUserPasswords(passwords);
+        appendAuditLog({
+            scope: 'admin',
+            action: 'save_password_reference',
+            actor: 'admin',
+            target: email,
+            details: 'Actualización de contraseña registrada en panel'
+        });
         loadUsers();
         setSuccess(`Contraseña registrada actualizada para ${email}`);
     };
 
     const togglePasswordVisibility = (email: string) => {
         setShowPasswordByEmail((prev) => ({ ...prev, [email]: !prev[email] }));
+    };
+
+    const handleToggleBlocked = (email: string, blocked: boolean) => {
+        updateUserSecurity(email, { blocked });
+        appendAuditLog({
+            scope: 'admin',
+            action: blocked ? 'block_user' : 'unblock_user',
+            actor: 'admin',
+            target: email,
+            details: blocked ? 'Cuenta bloqueada' : 'Cuenta desbloqueada'
+        });
+        loadUsers();
+        setSuccess(blocked ? `Usuario ${email} bloqueado` : `Usuario ${email} desbloqueado`);
+    };
+
+    const handleToggleForcePasswordChange = (email: string, forcePasswordChange: boolean) => {
+        updateUserSecurity(email, { forcePasswordChange });
+        appendAuditLog({
+            scope: 'admin',
+            action: forcePasswordChange ? 'force_password_change_on' : 'force_password_change_off',
+            actor: 'admin',
+            target: email,
+            details: forcePasswordChange ? 'Cambio de contraseña obligatorio activado' : 'Cambio de contraseña obligatorio desactivado'
+        });
+        loadUsers();
+        setSuccess(forcePasswordChange
+            ? `Se exigirá cambio de contraseña a ${email}`
+            : `Se quitó la exigencia de cambio para ${email}`);
     };
 
     if (!isOpen) return null;
@@ -542,6 +582,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                     className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 >
                                     <option value="reader">Lector</option>
+                                    <option value="editor">Editor</option>
                                     <option value="admin">Administrador</option>
                                 </select>
                             </div>
@@ -609,6 +650,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                                     {user.email}
                                                 </p>
+                                                <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-0.5">
+                                                    <Clock3 className="w-3 h-3" />
+                                                    {user.lastAccessAt
+                                                        ? `Último acceso: ${new Date(user.lastAccessAt).toLocaleString('es-CL')}`
+                                                        : 'Sin accesos registrados'}
+                                                </p>
                                                 <span className={`inline-flex mt-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${ROLE_COLORS[user.role].bg} ${ROLE_COLORS[user.role].text}`}>
                                                     {ROLE_LABELS[user.role]}
                                                 </span>
@@ -623,6 +670,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                                 className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 <option value="reader">Lector</option>
+                                                <option value="editor">Editor</option>
                                                 <option value="admin">Admin</option>
                                             </select>
 
@@ -711,6 +759,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                             El campo de contraseña se guarda en este panel para visualización administrativa.
                                         </p>
                                     </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => handleToggleBlocked(user.email, !user.blocked)}
+                                            className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 ${user.blocked
+                                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                                }`}
+                                        >
+                                            <ShieldAlert className="w-4 h-4" />
+                                            {user.blocked ? 'Desbloquear usuario' : 'Bloquear usuario'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleToggleForcePasswordChange(user.email, !user.forcePasswordChange)}
+                                            className={`px-3 py-2 rounded-lg text-xs font-bold ${user.forcePasswordChange
+                                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                                : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                                                }`}
+                                        >
+                                            {user.forcePasswordChange ? 'Quitar cambio obligatorio' : 'Forzar cambio de contraseña'}
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
 
@@ -762,6 +832,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 className="px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
                             >
                                 <option value="reader">Lector</option>
+                                <option value="editor">Editor</option>
                                 <option value="admin">Admin</option>
                             </select>
                             <button
@@ -770,6 +841,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             >
                                 Anadir
                             </button>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Clock3 className="w-5 h-5 text-indigo-500" />
+                            <h3 className="font-black text-slate-900 dark:text-white">Auditoría reciente</h3>
+                        </div>
+                        <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+                            {adminAuditEntries.length === 0 && (
+                                <p className="text-xs text-slate-500">Sin eventos registrados.</p>
+                            )}
+                            {adminAuditEntries.map((entry) => (
+                                <div key={entry.id} className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                        {entry.action} {entry.target ? `· ${entry.target}` : ''}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        {entry.details || 'Sin detalle'}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                                        {new Date(entry.timestamp).toLocaleString('es-CL')}
+                                    </p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>

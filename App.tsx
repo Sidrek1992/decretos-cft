@@ -48,6 +48,7 @@ import { useEmployeeSync } from './hooks/useEmployeeSync';
 import { useDarkMode } from './hooks/useDarkMode';
 import { calculateNextCorrelatives } from './utils/formatters';
 import { getFLSaldoFinal } from './utils/flBalance';
+import { appendAuditLog } from './utils/audit';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
@@ -100,7 +101,9 @@ const AppContent: React.FC = () => {
     syncWarnings,
     pendingSync,
     isRetryScheduled,
+    moduleSync,
     fetchFromCloud,
+    fetchModuleFromCloud,
     syncToCloud,
     undo,
     canUndo
@@ -148,6 +151,7 @@ const AppContent: React.FC = () => {
   }, [records, employees]);
 
   const handleSubmit = (formData: PermitFormData) => {
+    const actor = user?.email || 'sistema';
     let updated: PermitRecord[];
     if (editingRecord) {
       updated = records.map(r =>
@@ -155,9 +159,23 @@ const AppContent: React.FC = () => {
       );
       setEditingRecord(null);
       toast.success('Decreto actualizado', `${formData.acto} modificado correctamente`);
+      appendAuditLog({
+        scope: 'decree',
+        action: 'update_decree',
+        actor,
+        target: `${formData.solicitudType} ${formData.acto}`,
+        details: `Funcionario: ${formData.funcionario}`
+      });
     } else {
       updated = [...records, { ...formData, id: crypto.randomUUID(), createdAt: Date.now() }];
       toast.success('Decreto emitido', `Resolución ${formData.acto} creada exitosamente`);
+      appendAuditLog({
+        scope: 'decree',
+        action: 'create_decree',
+        actor,
+        target: `${formData.solicitudType} ${formData.acto}`,
+        details: `Funcionario: ${formData.funcionario}`
+      });
     }
     setRecords(updated);
     syncToCloud(updated);
@@ -170,13 +188,21 @@ const AppContent: React.FC = () => {
 
   const confirmDelete = useCallback(() => {
     if (deleteTargetId) {
+      const deleted = records.find(r => r.id === deleteTargetId);
       const updated = records.filter(r => r.id !== deleteTargetId);
       setRecords(updated);
       syncToCloud(updated);
       toast.warning('Decreto eliminado', 'Puedes deshacer esta acción');
+      appendAuditLog({
+        scope: 'decree',
+        action: 'delete_decree',
+        actor: user?.email || 'sistema',
+        target: deleted ? `${deleted.solicitudType} ${deleted.acto}` : deleteTargetId,
+        details: deleted ? `Funcionario: ${deleted.funcionario}` : 'Eliminado por ID'
+      });
       setDeleteTargetId(null);
     }
-  }, [deleteTargetId, records, setRecords, syncToCloud, toast]);
+  }, [deleteTargetId, records, setRecords, syncToCloud, toast, user?.email]);
 
   const handleUndo = () => {
     undo();
@@ -661,6 +687,23 @@ const AppContent: React.FC = () => {
                         <CheckCircle className="w-2.5 h-2.5" /> Sincronizado
                       </span>
                     )}
+                  </div>
+                  <div className="mt-1 hidden sm:flex items-center gap-2">
+                    {(['PA', 'FL'] as const).map((module) => (
+                      <button
+                        key={module}
+                        onClick={() => fetchModuleFromCloud(module)}
+                        className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-colors ${moduleSync[module].status === 'error'
+                          ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+                          : moduleSync[module].status === 'syncing'
+                            ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-800'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                          }`}
+                        title={moduleSync[module].lastError || `Reintentar sincronización ${module}`}
+                      >
+                        {module} {moduleSync[module].status === 'syncing' ? '...' : 'sync'}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

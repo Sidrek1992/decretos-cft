@@ -136,7 +136,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     // Comandos de empleados
     const employeeCommands: CommandItem[] = useMemo(() =>
-        employees.slice(0, 50).map(emp => ({
+        employees.map(emp => ({
             id: `emp-${emp.rut}`,
             type: 'employee' as const,
             icon: <User className="w-4 h-4" />,
@@ -153,7 +153,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         records
             .slice()
             .sort((a, b) => compareRecordsByDateDesc(a, b))
-            .slice(0, 20)
+            .slice(0, 120)
             .map(r => ({
                 id: `rec-${r.id}`,
                 type: 'decree' as const,
@@ -192,7 +192,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
                 return searchTerms.every(term => searchableText.includes(term));
             })
-            .slice(0, 15); // Limitar resultados
+            .slice(0, 60); // Limitar resultados visibles
     }, [query, actionCommands, employeeCommands, recentDecreeCommands]);
 
     // Navegar con teclado

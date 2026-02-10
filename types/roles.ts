@@ -1,5 +1,5 @@
 // Tipos de roles disponibles
-export type UserRole = 'admin' | 'reader';
+export type UserRole = 'admin' | 'editor' | 'reader';
 
 // Permisos por acción
 export interface Permissions {
@@ -32,6 +32,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
         canExportDashboard: true,
         canAccessSettings: true,
     },
+    editor: {
+        canCreateDecree: true,
+        canEditDecree: true,
+        canDeleteDecree: false,
+        canGeneratePDF: true,
+        canManageEmployees: true,
+        canExportExcel: true,
+        canExportDashboard: true,
+        canAccessSettings: false,
+    },
     reader: {
         canCreateDecree: false,
         canEditDecree: false,
@@ -47,6 +57,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
 // Labels para mostrar en UI
 export const ROLE_LABELS: Record<UserRole, string> = {
     admin: 'Administrador',
+    editor: 'Editor',
     reader: 'Lector',
 };
 
@@ -55,6 +66,10 @@ export const ROLE_COLORS: Record<UserRole, { bg: string; text: string }> = {
     admin: {
         bg: 'bg-purple-100 dark:bg-purple-900/40',
         text: 'text-purple-700 dark:text-purple-300',
+    },
+    editor: {
+        bg: 'bg-amber-100 dark:bg-amber-900/40',
+        text: 'text-amber-700 dark:text-amber-300',
     },
     reader: {
         bg: 'bg-sky-100 dark:bg-sky-900/40',
