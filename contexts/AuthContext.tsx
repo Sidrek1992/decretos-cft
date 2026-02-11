@@ -3,7 +3,7 @@ import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { UserRole, Permissions, getPermissions, hasPermission, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
 import { appendAuditLog } from '../utils/audit';
-import { getUserSecurityByEmail, loadUserRoles, touchUserLastAccess, updateUserSecurity } from '../utils/userAdminStorage';
+import { getUserSecurityByEmail, isMandatoryAdminEmail, loadUserRoles, touchUserLastAccess, updateUserSecurity } from '../utils/userAdminStorage';
 
 interface UserProfile {
     id: string;
@@ -42,14 +42,9 @@ interface AuthProviderProps {
     children: React.ReactNode;
 }
 
-const ENFORCED_ADMIN_EMAILS = new Set([
-    'mguzmanahumada@gmail.com',
-    'a.gestiondepersonas@cftestatalaricayparinacota.cl'
-]);
-
 const getEnforcedRoleByEmail = (email: string | undefined): UserRole | null => {
     if (!email) return null;
-    return ENFORCED_ADMIN_EMAILS.has(email.trim().toLowerCase()) ? 'admin' : null;
+    return isMandatoryAdminEmail(email) ? 'admin' : null;
 };
 
 const getRoleFromEmail = (email: string | undefined): UserRole => {

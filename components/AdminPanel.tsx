@@ -3,7 +3,6 @@ import {
     X,
     Settings,
     Users,
-    Shield,
     UserPlus,
     Trash2,
     Crown,
@@ -29,7 +28,8 @@ import {
     saveUserPasswords,
     loadUserSecurity,
     saveUserSecurity,
-    updateUserSecurity
+    updateUserSecurity,
+    isMandatoryAdminEmail
 } from '../utils/userAdminStorage';
 import { appendAuditLog, getAuditLog } from '../utils/audit';
 
@@ -79,11 +79,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [createRole, setCreateRole] = useState<UserRole>('reader');
     const [showCreatePassword, setShowCreatePassword] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
-
-    const [assignFirstName, setAssignFirstName] = useState('');
-    const [assignLastName, setAssignLastName] = useState('');
-    const [assignEmail, setAssignEmail] = useState('');
-    const [assignRole, setAssignRole] = useState<UserRole>('reader');
 
     const [isResettingByEmail, setIsResettingByEmail] = useState<Record<string, boolean>>({});
     const [profileDrafts, setProfileDrafts] = useState<Record<string, { firstName: string; lastName: string }>>({});
@@ -278,6 +273,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     };
 
     const handleChangeRole = async (email: string, newRole: UserRole) => {
+        if (isMandatoryAdminEmail(email) && newRole !== 'admin') {
+            setError('No puedes cambiar el rol de un administrador obligatorio');
+            return;
+        }
+
         const roles = loadUserRoles();
         roles[email.toLowerCase()] = newRole;
         saveUserRoles(roles);
@@ -306,8 +306,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     };
 
     const handleRemoveUser = (email: string) => {
-        if (email.toLowerCase() === 'mguzmanahumada@gmail.com') {
-            setError('No puedes eliminar al administrador principal');
+        if (isMandatoryAdminEmail(email)) {
+            setError('No puedes eliminar un administrador obligatorio');
             return;
         }
 
@@ -337,60 +337,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
         void loadUsers();
         setSuccess(`Usuario ${email} eliminado de la gestión de roles`);
-    };
-
-    const handleAddExistingUser = () => {
-        if (!assignEmail.trim()) {
-            setError('Ingresa un email');
-            return;
-        }
-
-        if (!assignFirstName.trim() || !assignLastName.trim()) {
-            setError('Ingresa nombre y apellido del usuario');
-            return;
-        }
-
-        const email = assignEmail.trim().toLowerCase();
-        const firstName = assignFirstName.trim();
-        const lastName = assignLastName.trim();
-
-        const roles = loadUserRoles();
-        if (roles[email]) {
-            setError('Este usuario ya está en la lista');
-            return;
-        }
-
-        roles[email] = assignRole;
-        saveUserRoles(roles);
-
-        const profiles = loadUserProfiles();
-        profiles[email] = { firstName, lastName };
-        saveUserProfiles(profiles);
-
-        const passwords = loadUserPasswords();
-        if (!passwords[email]) passwords[email] = '';
-        saveUserPasswords(passwords);
-
-        const security = loadUserSecurity();
-        if (!security[email]) security[email] = { blocked: false, forcePasswordChange: false, lastAccessAt: null };
-        saveUserSecurity(security);
-
-        void upsertRemoteProfile({ email, role: assignRole, firstName, lastName }).catch(() => undefined);
-
-        appendAuditLog({
-            scope: 'admin',
-            action: 'add_existing_user',
-            actor: 'admin',
-            target: email,
-            details: `Asignado como ${assignRole}`
-        });
-
-        void loadUsers();
-        setSuccess(`Usuario ${email} añadido como ${ROLE_LABELS[assignRole]}`);
-        setAssignFirstName('');
-        setAssignLastName('');
-        setAssignEmail('');
-        setAssignRole('reader');
     };
 
     const handleProfileDraftChange = (email: string, field: 'firstName' | 'lastName', value: string) => {
@@ -493,6 +439,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     };
 
     const handleToggleBlocked = (email: string, blocked: boolean) => {
+        if (isMandatoryAdminEmail(email)) {
+            setError('No puedes bloquear un administrador obligatorio');
+            return;
+        }
+
         updateUserSecurity(email, { blocked });
         appendAuditLog({
             scope: 'admin',
@@ -506,6 +457,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     };
 
     const handleToggleForcePasswordChange = (email: string, forcePasswordChange: boolean) => {
+        if (isMandatoryAdminEmail(email)) {
+            setError('No puedes forzar cambio de contraseña para un administrador obligatorio');
+            return;
+        }
+
         updateUserSecurity(email, { forcePasswordChange });
         appendAuditLog({
             scope: 'admin',
@@ -741,7 +697,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                             <select
                                                 value={user.role}
                                                 onChange={(e) => { void handleChangeRole(user.email, e.target.value as UserRole); }}
-                                                disabled={user.email.toLowerCase() === 'mguzmanahumada@gmail.com'}
+                                                disabled={isMandatoryAdminEmail(user.email)}
                                                 className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 <option value="reader">Lector</option>
@@ -749,7 +705,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                                 <option value="admin">Admin</option>
                                             </select>
 
-                                            {user.email.toLowerCase() !== 'mguzmanahumada@gmail.com' && (
+                                            {!isMandatoryAdminEmail(user.email) && (
                                                 <button
                                                     onClick={() => handleRemoveUser(user.email)}
                                                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
@@ -838,22 +794,28 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         <button
                                             onClick={() => handleToggleBlocked(user.email, !user.blocked)}
-                                            className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 ${user.blocked
+                                            disabled={isMandatoryAdminEmail(user.email)}
+                                            className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${user.blocked
                                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                                                 : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                                                 }`}
                                         >
                                             <ShieldAlert className="w-4 h-4" />
-                                            {user.blocked ? 'Desbloquear usuario' : 'Bloquear usuario'}
+                                            {isMandatoryAdminEmail(user.email)
+                                                ? 'Administrador protegido'
+                                                : user.blocked ? 'Desbloquear usuario' : 'Bloquear usuario'}
                                         </button>
                                         <button
                                             onClick={() => handleToggleForcePasswordChange(user.email, !user.forcePasswordChange)}
-                                            className={`px-3 py-2 rounded-lg text-xs font-bold ${user.forcePasswordChange
+                                            disabled={isMandatoryAdminEmail(user.email)}
+                                            className={`px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed ${user.forcePasswordChange
                                                 ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
                                                 : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
                                                 }`}
                                         >
-                                            {user.forcePasswordChange ? 'Quitar cambio obligatorio' : 'Forzar cambio de contraseña'}
+                                            {isMandatoryAdminEmail(user.email)
+                                                ? 'Cambio no permitido'
+                                                : user.forcePasswordChange ? 'Quitar cambio obligatorio' : 'Forzar cambio de contraseña'}
                                         </button>
                                     </div>
                                 </div>
@@ -865,57 +827,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                     <p className="text-sm">No hay usuarios registrados</p>
                                 </div>
                             )}
-                        </div>
-                    </div>
-
-                    {/* Añadir usuario existente */}
-                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Shield className="w-5 h-5 text-amber-600" />
-                            <h3 className="font-black text-amber-800 dark:text-amber-300">Asignar Rol a Usuario Existente</h3>
-                        </div>
-                        <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">
-                            Si el usuario ya tiene cuenta en Supabase, puedes registrarlo en este panel con su nombre, apellido y rol.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <input
-                                type="text"
-                                value={assignFirstName}
-                                onChange={(e) => setAssignFirstName(e.target.value)}
-                                placeholder="Nombre"
-                                className="px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
-                            />
-                            <input
-                                type="text"
-                                value={assignLastName}
-                                onChange={(e) => setAssignLastName(e.target.value)}
-                                placeholder="Apellido"
-                                className="px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
-                            />
-                            <input
-                                type="email"
-                                value={assignEmail}
-                                onChange={(e) => setAssignEmail(e.target.value)}
-                                placeholder="email@existente.com"
-                                className="sm:col-span-2 px-4 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
-                            />
-                        </div>
-                        <div className="flex gap-2 mt-2">
-                            <select
-                                value={assignRole}
-                                onChange={(e) => setAssignRole(e.target.value as UserRole)}
-                                className="px-3 py-2 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-sm"
-                            >
-                                <option value="reader">Lector</option>
-                                <option value="editor">Editor</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                            <button
-                                onClick={handleAddExistingUser}
-                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-sm"
-                            >
-                                Anadir
-                            </button>
                         </div>
                     </div>
 

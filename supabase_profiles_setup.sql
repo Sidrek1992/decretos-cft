@@ -63,8 +63,10 @@ before update on public.profiles
 for each row
 execute function public.set_profiles_updated_at();
 
--- Rol solicitado: dejar este usuario como administrador
+-- Usuarios administradores obligatorios
 insert into public.profiles (email, role, first_name, last_name)
-values ('a.gestiondepersonas@cftestatalaricayparinacota.cl', 'admin', '', '')
+values
+  ('a.gestiondepersonas@cftestatalaricayparinacota.cl', 'admin', '', ''),
+  ('mguzmanahumada@gmail.com', 'admin', '', '')
 on conflict (email)
 do update set role = excluded.role, updated_at = now();
