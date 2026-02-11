@@ -15,17 +15,32 @@ const ROLES_STORAGE_KEY = 'gdp_user_roles';
 const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
 const USER_PASSWORDS_STORAGE_KEY = 'gdp_user_passwords';
 const USER_SECURITY_STORAGE_KEY = 'gdp_user_security';
+const MANDATORY_ADMIN_EMAILS = [
+  'mguzmanahumada@gmail.com',
+  'a.gestiondepersonas@cftestatalaricayparinacota.cl'
+] as const;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 export const loadUserRoles = (): Record<string, UserRole> => {
+  const mandatoryAdmins = MANDATORY_ADMIN_EMAILS.reduce<Record<string, UserRole>>((acc, email) => {
+    acc[email] = 'admin';
+    return acc;
+  }, {});
+
   try {
     const stored = localStorage.getItem(ROLES_STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as Record<string, UserRole>;
+    if (stored) {
+      const parsed = JSON.parse(stored) as Record<string, UserRole>;
+      return {
+        ...parsed,
+        ...mandatoryAdmins
+      };
+    }
   } catch {
     // ignore
   }
-  return { 'mguzmanahumada@gmail.com': 'admin' };
+  return mandatoryAdmins;
 };
 
 export const saveUserRoles = (roles: Record<string, UserRole>) => {

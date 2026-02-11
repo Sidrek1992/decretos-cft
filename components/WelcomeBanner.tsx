@@ -31,6 +31,7 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
 }) => {
     const [isDismissed, setIsDismissed] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
+    const [currentTime, setCurrentTime] = useState(() => new Date());
 
     // Check if already dismissed today
     useEffect(() => {
@@ -38,6 +39,14 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
         if (localStorage.getItem(key)) {
             setIsDismissed(true);
         }
+    }, []);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            setCurrentTime(new Date());
+        }, 60_000);
+
+        return () => window.clearInterval(timer);
     }, []);
 
     const dismiss = () => {
@@ -48,21 +57,20 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
     };
 
     const greeting = useMemo(() => {
-        const hour = new Date().getHours();
+        const hour = currentTime.getHours();
         if (hour < 12) return 'Buenos días';
-        if (hour < 18) return 'Buenas tardes';
+        if (hour < 20) return 'Buenas tardes';
         return 'Buenas noches';
-    }, []);
+    }, [currentTime]);
 
     const todayStr = useMemo(() => {
-        const now = new Date();
-        return now.toLocaleDateString('es-CL', {
+        return currentTime.toLocaleDateString('es-CL', {
             weekday: 'long',
             day: 'numeric',
             month: 'long',
             year: 'numeric'
         });
-    }, []);
+    }, [currentTime]);
 
     const displayName = userName?.trim() || null;
 

@@ -42,6 +42,16 @@ interface AuthProviderProps {
     children: React.ReactNode;
 }
 
+const ENFORCED_ADMIN_EMAILS = new Set([
+    'mguzmanahumada@gmail.com',
+    'a.gestiondepersonas@cftestatalaricayparinacota.cl'
+]);
+
+const getEnforcedRoleByEmail = (email: string | undefined): UserRole | null => {
+    if (!email) return null;
+    return ENFORCED_ADMIN_EMAILS.has(email.trim().toLowerCase()) ? 'admin' : null;
+};
+
 const getRoleFromEmail = (email: string | undefined): UserRole => {
     if (!email) return 'reader';
     const roles = loadUserRoles();
@@ -72,6 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Calcular rol basado en el perfil o email
     const role: UserRole =
+        getEnforcedRoleByEmail(user?.email) ||
         profile?.role ||
         resolveRoleFromMetadata(user?.user_metadata as Record<string, unknown> | undefined) ||
         getRoleFromEmail(user?.email);
@@ -83,28 +94,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return hasPermission(role, permission);
     };
 
-    // Cargar perfil desde Supabase (si existe la tabla profiles)
-    // Esta función es opcional - si falla, usamos el rol basado en email
-    const loadProfile = async (userId: string): Promise<void> => {
-        // Saltamos la carga de perfil por ahora ya que no hay tabla profiles
-        // Si quieres usar la tabla profiles en el futuro, descomenta el código abajo
-        return;
+    // Cargar perfil desde Supabase para persistir rol entre dispositivos
+    const loadProfile = async (userId: string, email?: string): Promise<void> => {
+        const normalizedEmail = email?.trim().toLowerCase();
+        if (!normalizedEmail) {
+            setProfile(null);
+            return;
+        }
 
-        /*
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
+                .select('email, role, created_at')
+                .eq('email', normalizedEmail)
+                .maybeSingle();
 
-            if (data && !error) {
-                setProfile(data as UserProfile);
+            if (!error && data?.role) {
+                const dbRole = String(data.role).toLowerCase();
+                const normalizedRole: UserRole = dbRole === 'admin' || dbRole === 'editor' || dbRole === 'reader'
+                    ? (dbRole as UserRole)
+                    : 'reader';
+                setProfile({
+                    id: userId,
+                    email: data.email,
+                    role: normalizedRole,
+                    created_at: String(data.created_at || new Date().toISOString())
+                });
+                return;
             }
-        } catch (e) {
-            console.debug('Tabla profiles no configurada');
+        } catch {
+            // Si falla la tabla remota, mantenemos fallback local
         }
-        */
+
+        setProfile(null);
     };
 
     useEffect(() => {
@@ -122,7 +144,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(session?.user ?? null);
 
             if (session?.user) {
-                await loadProfile(session.user.id);
+                await loadProfile(session.user.id, session.user.email);
             }
 
             setLoading(false);
@@ -145,7 +167,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setUser(session?.user ?? null);
 
                 if (session?.user) {
-                    await loadProfile(session.user.id);
+                    await loadProfile(session.user.id, session.user.email);
                 } else {
                     setProfile(null);
                     clearWelcomeBannerDismissals();

@@ -50,6 +50,13 @@ interface ManagedUser {
     createdAt?: string;
 }
 
+interface RemoteProfileInput {
+    email: string;
+    role: UserRole;
+    firstName: string;
+    lastName: string;
+}
+
 
 export const getUserRole = (email: string): UserRole => {
     const roles = loadUserRoles();
@@ -84,34 +91,77 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [showPasswordByEmail, setShowPasswordByEmail] = useState<Record<string, boolean>>({});
     const [adminAuditEntries, setAdminAuditEntries] = useState(() => getAuditLog().slice(0, 30));
 
+    const upsertRemoteProfile = async ({ email, role, firstName, lastName }: RemoteProfileInput): Promise<void> => {
+        const { error: upsertError } = await supabase
+            .from('profiles')
+            .upsert({
+                email: email.toLowerCase(),
+                role,
+                first_name: firstName,
+                last_name: lastName
+            }, { onConflict: 'email' });
+
+        if (upsertError) {
+            throw upsertError;
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
-            loadUsers();
+            void loadUsers();
         }
     }, [isOpen]);
 
-    const loadUsers = () => {
+    const loadUsers = async () => {
         const roles = loadUserRoles();
         const profiles = loadUserProfiles();
         const passwords = loadUserPasswords();
         const security = loadUserSecurity();
+        const remoteProfilesByEmail: Record<string, { role: UserRole; firstName: string; lastName: string }> = {};
+
+        try {
+            const { data } = await supabase
+                .from('profiles')
+                .select('email, role, first_name, last_name');
+
+            (data || []).forEach((row: any) => {
+                const email = String(row?.email || '').trim().toLowerCase();
+                if (!email) return;
+
+                const rawRole = String(row?.role || '').toLowerCase();
+                const role: UserRole = rawRole === 'admin' || rawRole === 'editor' || rawRole === 'reader'
+                    ? rawRole
+                    : 'reader';
+
+                remoteProfilesByEmail[email] = {
+                    role,
+                    firstName: String(row?.first_name || '').trim(),
+                    lastName: String(row?.last_name || '').trim()
+                };
+            });
+        } catch {
+            // fallback local si la tabla no existe o hay error de permisos
+        }
+
         const emails = new Set<string>([
             ...Object.keys(roles),
             ...Object.keys(profiles),
             ...Object.keys(passwords),
-            ...Object.keys(security)
+            ...Object.keys(security),
+            ...Object.keys(remoteProfilesByEmail)
         ]);
 
         const userList: ManagedUser[] = Array.from(emails)
             .map((rawEmail) => {
                 const email = rawEmail.toLowerCase();
-                const profile = profiles[email] || { firstName: '', lastName: '' };
+                const localProfile = profiles[email] || { firstName: '', lastName: '' };
+                const remoteProfile = remoteProfilesByEmail[email];
                 const sec = security[email] || { blocked: false, forcePasswordChange: false, lastAccessAt: null };
                 return {
                     email,
-                    role: roles[email] || 'reader',
-                    firstName: profile.firstName,
-                    lastName: profile.lastName,
+                    role: remoteProfile?.role || roles[email] || 'reader',
+                    firstName: remoteProfile?.firstName || localProfile.firstName,
+                    lastName: remoteProfile?.lastName || localProfile.lastName,
                     password: passwords[email] || '',
                     blocked: Boolean(sec.blocked),
                     forcePasswordChange: Boolean(sec.forcePasswordChange),
@@ -193,6 +243,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             security[email] = { blocked: false, forcePasswordChange: false, lastAccessAt: null };
             saveUserSecurity(security);
 
+            try {
+                await upsertRemoteProfile({ email, role: createRole, firstName, lastName });
+            } catch {
+                // mantenemos fallback local
+            }
+
             appendAuditLog({
                 scope: 'admin',
                 action: 'create_user',
@@ -201,7 +257,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 details: `Creado con rol ${createRole}`
             });
 
-            loadUsers();
+            void loadUsers();
 
             setSuccess(`Usuario ${email} creado exitosamente como ${ROLE_LABELS[createRole]}`);
             setCreateFirstName('');
@@ -221,10 +277,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         }
     };
 
-    const handleChangeRole = (email: string, newRole: UserRole) => {
+    const handleChangeRole = async (email: string, newRole: UserRole) => {
         const roles = loadUserRoles();
         roles[email.toLowerCase()] = newRole;
         saveUserRoles(roles);
+
+        const managedUser = users.find((u) => u.email === email.toLowerCase());
+        try {
+            await upsertRemoteProfile({
+                email,
+                role: newRole,
+                firstName: managedUser?.firstName || '',
+                lastName: managedUser?.lastName || ''
+            });
+        } catch {
+            // mantenemos fallback local
+        }
+
         appendAuditLog({
             scope: 'admin',
             action: 'change_role',
@@ -232,7 +301,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             target: email,
             details: `Rol actualizado a ${newRole}`
         });
-        loadUsers();
+        void loadUsers();
         setSuccess(`Rol de ${email} cambiado a ${ROLE_LABELS[newRole]}`);
     };
 
@@ -266,7 +335,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             details: 'Usuario eliminado del panel'
         });
 
-        loadUsers();
+        void loadUsers();
         setSuccess(`Usuario ${email} eliminado de la gestión de roles`);
     };
 
@@ -306,6 +375,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         if (!security[email]) security[email] = { blocked: false, forcePasswordChange: false, lastAccessAt: null };
         saveUserSecurity(security);
 
+        void upsertRemoteProfile({ email, role: assignRole, firstName, lastName }).catch(() => undefined);
+
         appendAuditLog({
             scope: 'admin',
             action: 'add_existing_user',
@@ -314,7 +385,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             details: `Asignado como ${assignRole}`
         });
 
-        loadUsers();
+        void loadUsers();
         setSuccess(`Usuario ${email} añadido como ${ROLE_LABELS[assignRole]}`);
         setAssignFirstName('');
         setAssignLastName('');
@@ -345,6 +416,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const profiles = loadUserProfiles();
         profiles[email.toLowerCase()] = { firstName, lastName };
         saveUserProfiles(profiles);
+
+        const userRole = (users.find((u) => u.email === email.toLowerCase())?.role || 'reader') as UserRole;
+        void upsertRemoteProfile({ email, role: userRole, firstName, lastName }).catch(() => undefined);
+
         appendAuditLog({
             scope: 'admin',
             action: 'update_profile',
@@ -352,7 +427,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             target: email,
             details: `Nombre actualizado a ${firstName} ${lastName}`
         });
-        loadUsers();
+        void loadUsers();
         setSuccess(`Datos actualizados para ${email}`);
     };
 
@@ -409,7 +484,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             target: email,
             details: 'Actualización de contraseña registrada en panel'
         });
-        loadUsers();
+        void loadUsers();
         setSuccess(`Contraseña registrada actualizada para ${email}`);
     };
 
@@ -426,7 +501,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             target: email,
             details: blocked ? 'Cuenta bloqueada' : 'Cuenta desbloqueada'
         });
-        loadUsers();
+        void loadUsers();
         setSuccess(blocked ? `Usuario ${email} bloqueado` : `Usuario ${email} desbloqueado`);
     };
 
@@ -439,7 +514,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             target: email,
             details: forcePasswordChange ? 'Cambio de contraseña obligatorio activado' : 'Cambio de contraseña obligatorio desactivado'
         });
-        loadUsers();
+        void loadUsers();
         setSuccess(forcePasswordChange
             ? `Se exigirá cambio de contraseña a ${email}`
             : `Se quitó la exigencia de cambio para ${email}`);
@@ -665,7 +740,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                         <div className="flex items-center gap-2">
                                             <select
                                                 value={user.role}
-                                                onChange={(e) => handleChangeRole(user.email, e.target.value as UserRole)}
+                                                onChange={(e) => { void handleChangeRole(user.email, e.target.value as UserRole); }}
                                                 disabled={user.email.toLowerCase() === 'mguzmanahumada@gmail.com'}
                                                 className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
