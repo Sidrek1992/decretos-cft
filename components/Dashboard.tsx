@@ -383,12 +383,12 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                     trend={{ value: 100 - avgUsagePercent, label: `${(100 - avgUsagePercent).toFixed(0)}% libre` }}
                 />
                 <KpiCard
-                    label="Permisos Admin."
-                    value={stats.paCount}
-                    sub="Total registros PA"
-                    icon={Activity}
-                    iconBg="bg-indigo-50 dark:bg-indigo-900/40"
-                    iconColor="text-indigo-600 dark:text-indigo-400"
+                    label="Feriados Legales"
+                    value={stats.flCount}
+                    sub="Total registros FL"
+                    icon={Calendar}
+                    iconBg="bg-amber-50 dark:bg-amber-900/40"
+                    iconColor="text-amber-600 dark:text-amber-400"
                 />
                 <KpiCard
                     label="Saldo bajo"
@@ -564,7 +564,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                             const saldoFL = emp.saldoFL !== null ? emp.saldoFL.toFixed(1) : '—';
                             const saldoLabel = topFilter === 'PA' ? saldoPA
                                 : topFilter === 'FL' ? saldoFL
-                                : (emp.saldoPA !== null && emp.saldoFL !== null ? `${saldoPA} / ${saldoFL}` : emp.saldoPA !== null ? saldoPA : saldoFL);
+                                    : (emp.saldoPA !== null && emp.saldoFL !== null ? `${saldoPA} / ${saldoFL}` : emp.saldoPA !== null ? saldoPA : saldoFL);
                             const saldoNum = topFilter === 'PA' ? emp.saldoPA : topFilter === 'FL' ? emp.saldoFL : Math.min(emp.saldoPA ?? 999, emp.saldoFL ?? 999);
                             const saldoColor = saldoNum !== null && saldoNum < 2 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
 

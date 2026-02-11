@@ -619,7 +619,7 @@ const AppContent: React.FC = () => {
           onClickUrgent={handleViewUrgentFromWelcome}
         />
 
-        <StatsCards records={records} totalDatabaseEmployees={employees.length} />
+        <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
 
         {/* Dashboard condicional (lazy loaded) */}
         {showDashboard && (

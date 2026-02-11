@@ -1,14 +1,16 @@
 
 import React, { useMemo } from 'react';
 import { PermitRecord } from '../types';
-import { Landmark, Sun, Users, Activity } from 'lucide-react';
+import { Landmark, Sun, Users, AlertTriangle } from 'lucide-react';
+import { getFLSaldoFinal } from '../utils/flBalance';
 
 interface StatsCardsProps {
   records: PermitRecord[];
   totalDatabaseEmployees: number;
+  employees: { rut: string }[];
 }
 
-const StatsCards: React.FC<StatsCardsProps> = React.memo(({ records, totalDatabaseEmployees }) => {
+const StatsCards: React.FC<StatsCardsProps> = React.memo(({ records, totalDatabaseEmployees, employees }) => {
   const stats = useMemo(() => {
     const paRecords = records.filter(r => r.solicitudType === 'PA');
     const flRecords = records.filter(r => r.solicitudType === 'FL');
@@ -16,45 +18,69 @@ const StatsCards: React.FC<StatsCardsProps> = React.memo(({ records, totalDataba
     const totalFLDays = flRecords.reduce((acc, curr) => acc + curr.cantidadDias, 0);
     const employeesWithRecords = new Set(records.map(r => r.rut)).size;
 
+    // Calcular empleados con saldo bajo (< 2 días)
+    let lowBalanceCount = 0;
+    const sortedByDate = [...records].sort((a, b) => b.createdAt - a.createdAt);
+    const lastByRutPA: Record<string, PermitRecord> = {};
+    const lastByRutFL: Record<string, PermitRecord> = {};
+    sortedByDate.forEach(r => {
+      if (r.solicitudType === 'PA' && !lastByRutPA[r.rut]) lastByRutPA[r.rut] = r;
+      if (r.solicitudType === 'FL' && !lastByRutFL[r.rut]) lastByRutFL[r.rut] = r;
+    });
+    employees.forEach(emp => {
+      const lastPA = lastByRutPA[emp.rut];
+      if (lastPA) {
+        const saldo = lastPA.diasHaber - lastPA.cantidadDias;
+        if (saldo < 2) lowBalanceCount++;
+      }
+      const lastFL = lastByRutFL[emp.rut];
+      if (lastFL) {
+        const saldo = getFLSaldoFinal(lastFL, 0);
+        if (saldo < 2) lowBalanceCount++;
+      }
+    });
+
+    const hasLowBalance = lowBalanceCount > 0;
+
     return [
-    {
-      label: 'Decretos PA',
-      value: paRecords.length,
-      icon: Landmark,
-      color: 'text-indigo-700 dark:text-indigo-400',
-      bg: 'bg-indigo-50 dark:bg-indigo-900/40',
-      sub: `${totalPADays} días`,
-      borderColor: 'border-indigo-100 dark:border-indigo-800/50'
-    },
-    {
-      label: 'Feriados FL',
-      value: flRecords.length,
-      icon: Sun,
-      color: 'text-amber-700 dark:text-amber-400',
-      bg: 'bg-amber-50 dark:bg-amber-900/40',
-      sub: `${totalFLDays} días`,
-      borderColor: 'border-amber-100 dark:border-amber-800/50'
-    },
-    {
-      label: 'Base Personal',
-      value: totalDatabaseEmployees,
-      icon: Users,
-      color: 'text-slate-700 dark:text-slate-300',
-      bg: 'bg-slate-100 dark:bg-slate-700/50',
-      sub: `${employeesWithRecords} con movimientos`,
-      borderColor: 'border-slate-200 dark:border-slate-600/50'
-    },
-    {
-      label: 'Total Actos',
-      value: records.length,
-      icon: Activity,
-      color: 'text-emerald-700 dark:text-emerald-400',
-      bg: 'bg-emerald-50 dark:bg-emerald-900/40',
-      sub: 'PA + FL',
-      borderColor: 'border-emerald-100 dark:border-emerald-800/50'
-    },
-  ];
-  }, [records, totalDatabaseEmployees]);
+      {
+        label: 'Decretos PA',
+        value: paRecords.length,
+        icon: Landmark,
+        color: 'text-indigo-700 dark:text-indigo-400',
+        bg: 'bg-indigo-50 dark:bg-indigo-900/40',
+        sub: `${totalPADays} días`,
+        borderColor: 'border-indigo-100 dark:border-indigo-800/50'
+      },
+      {
+        label: 'Feriados FL',
+        value: flRecords.length,
+        icon: Sun,
+        color: 'text-amber-700 dark:text-amber-400',
+        bg: 'bg-amber-50 dark:bg-amber-900/40',
+        sub: `${totalFLDays} días`,
+        borderColor: 'border-amber-100 dark:border-amber-800/50'
+      },
+      {
+        label: 'Base Personal',
+        value: totalDatabaseEmployees,
+        icon: Users,
+        color: 'text-slate-700 dark:text-slate-300',
+        bg: 'bg-slate-100 dark:bg-slate-700/50',
+        sub: `${employeesWithRecords} con movimientos`,
+        borderColor: 'border-slate-200 dark:border-slate-600/50'
+      },
+      {
+        label: 'Saldo Bajo',
+        value: lowBalanceCount,
+        icon: AlertTriangle,
+        color: hasLowBalance ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400',
+        bg: hasLowBalance ? 'bg-amber-50 dark:bg-amber-900/40' : 'bg-emerald-50 dark:bg-emerald-900/40',
+        sub: hasLowBalance ? 'Menos de 2 días' : 'Sin alertas',
+        borderColor: hasLowBalance ? 'border-amber-200 dark:border-amber-800/50' : 'border-emerald-100 dark:border-emerald-800/50'
+      },
+    ];
+  }, [records, totalDatabaseEmployees, employees]);
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
