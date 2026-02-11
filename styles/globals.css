@@ -540,3 +540,128 @@
     display: none !important;
   }
 }
+
+/* ============================================
+   MOBILE MENU ANIMATIONS
+   ============================================ */
+
+/* Mobile menu slide-in from right */
+@keyframes mobile-menu-enter {
+  from {
+    transform: translateX(100%);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes mobile-menu-exit {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0.8;
+  }
+}
+
+.mobile-menu-enter {
+  animation: mobile-menu-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mobile-menu-exit {
+  animation: mobile-menu-exit 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Mobile menu backdrop */
+@keyframes mobile-backdrop-enter {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes mobile-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.mobile-backdrop-enter {
+  animation: mobile-backdrop-enter 0.3s ease forwards;
+}
+
+.mobile-backdrop-exit {
+  animation: mobile-backdrop-exit 0.2s ease forwards;
+}
+
+/* Menu item stagger animation */
+@keyframes menu-item-enter {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.menu-item-enter {
+  animation: menu-item-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Header dropdown animations */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dropdown-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+}
+
+.dropdown-enter {
+  animation: dropdown-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dropdown-exit {
+  animation: dropdown-exit 0.15s ease forwards;
+}
+
+/* Logo pulse animation for syncing */
+@keyframes logo-sync-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
+  }
+}
+
+.logo-syncing {
+  animation: logo-sync-pulse 1.5s ease-in-out infinite;
+}

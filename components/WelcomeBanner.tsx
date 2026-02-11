@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Sparkles, X, ChevronRight, Calendar, Shield, TrendingUp, Clock } from 'lucide-react';
+import { Sparkles, X, Shield, TrendingUp, Clock } from 'lucide-react';
 
 interface WelcomeBannerProps {
     userName?: string;
@@ -9,6 +9,11 @@ interface WelcomeBannerProps {
     onClickDecrees?: () => void;
     onClickEmployees?: () => void;
     onClickUrgent?: () => void;
+    // Sync status
+    isSyncing?: boolean;
+    isOnline?: boolean;
+    lastSync?: Date | null;
+    syncStatusDotClass?: string;
 }
 
 const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
@@ -19,6 +24,10 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
     onClickDecrees,
     onClickEmployees,
     onClickUrgent,
+    isSyncing = false,
+    isOnline = true,
+    lastSync,
+    syncStatusDotClass = 'bg-emerald-500',
 }) => {
     const [isDismissed, setIsDismissed] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -67,10 +76,21 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
 
             <div className="relative flex items-start justify-between gap-4">
                 <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <Sparkles className="w-4 h-4 text-indigo-500" />
                         <span className="text-[10px] font-black text-indigo-500/70 dark:text-indigo-400/70 uppercase tracking-widest">
                             {todayStr}
+                        </span>
+                        {/* Sync status inline */}
+                        <span className="text-slate-400 dark:text-slate-500">·</span>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-red-500'} ${isSyncing ? 'animate-pulse' : ''}`} />
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                            {isSyncing ? 'Sincronizando...' : isOnline ? 'Conectado' : 'Sin conexión'}
+                            {lastSync && !isSyncing && (
+                                <span className="text-slate-500 dark:text-slate-400">
+                                    {' · '}{new Date(lastSync).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            )}
                         </span>
                     </div>
 

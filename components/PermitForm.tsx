@@ -11,6 +11,7 @@ import { formatRut, toProperCase } from '../utils/formatters';
 import { extractDataFromPdf, extractFLDataFromPdf } from '../utils/aiProcessor';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
+import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
 
 // Función para verificar si una fecha es fin de semana
 const isWeekend = (dateString: string): boolean => {
@@ -331,10 +332,15 @@ const PermitForm: React.FC<PermitFormProps> = ({
     setErrors(prev => ({ ...prev, rut: rutError }));
   };
 
-  const filteredEmployees = employees.filter(e =>
-    e.nombre.toLowerCase().includes(formData.funcionario.toLowerCase()) ||
-    e.rut.includes(formData.funcionario)
-  );
+  const normalizedEmployeeQuery = normalizeSearchText(formData.funcionario);
+  const normalizedEmployeeRutQuery = normalizeRutForSearch(formData.funcionario);
+
+  const filteredEmployees = employees.filter(e => {
+    return (
+      normalizeSearchText(e.nombre).includes(normalizedEmployeeQuery) ||
+      normalizeRutForSearch(e.rut).includes(normalizedEmployeeRutQuery)
+    );
+  });
 
   const saldoFinal = (formData.diasHaber - formData.cantidadDias).toFixed(1);
   const isNegative = parseFloat(saldoFinal) < 0;

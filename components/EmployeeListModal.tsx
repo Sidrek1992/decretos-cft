@@ -10,6 +10,7 @@ import {
 import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc, getRecordDateValue } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
+import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logger } from '../utils/logger';
 import EmployeeTimeline from './EmployeeTimeline';
@@ -140,12 +141,14 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).getTime();
+    const normalizedSearch = normalizeSearchText(search);
+    const normalizedRutSearch = normalizeRutForSearch(search);
 
     return employees
       .filter(e => {
         const matchesSearch =
-          e.nombre.toLowerCase().includes(search.toLowerCase()) ||
-          e.rut.includes(search);
+          normalizeSearchText(e.nombre).includes(normalizedSearch) ||
+          normalizeRutForSearch(e.rut).includes(normalizedRutSearch);
 
         if (!matchesSearch) return false;
 

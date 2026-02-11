@@ -55,6 +55,15 @@ const resolveRoleFromMetadata = (metadata: Record<string, unknown> | null | unde
     return null;
 };
 
+const clearWelcomeBannerDismissals = (): void => {
+    try {
+        const keysToRemove = Object.keys(localStorage).filter(key => key.startsWith('gdp-banner-dismissed-'));
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+    } catch {
+        // ignore storage errors in non-browser or restricted contexts
+    }
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
@@ -139,6 +148,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     await loadProfile(session.user.id);
                 } else {
                     setProfile(null);
+                    clearWelcomeBannerDismissals();
                 }
 
                 setLoading(false);
@@ -224,6 +234,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
         }
         setProfile(null);
+        clearWelcomeBannerDismissals();
         await supabase.auth.signOut();
     };
 

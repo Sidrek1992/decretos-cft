@@ -3,6 +3,7 @@ import { User, Fingerprint, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { Employee } from '../../types';
 import { validateRut } from '../../config';
 import { formatRut, toProperCase } from '../../utils/formatters';
+import { normalizeRutForSearch, normalizeSearchText } from '../../utils/search';
 
 interface EmployeeSectionProps {
   funcionario: string;
@@ -46,10 +47,15 @@ export const EmployeeSection: React.FC<EmployeeSectionProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredEmployees = employees.filter(e =>
-    e.nombre.toLowerCase().includes(funcionario.toLowerCase()) ||
-    e.rut.includes(funcionario)
-  );
+  const normalizedQuery = normalizeSearchText(funcionario);
+  const normalizedRutQuery = normalizeRutForSearch(funcionario);
+
+  const filteredEmployees = employees.filter(e => {
+    return (
+      normalizeSearchText(e.nombre).includes(normalizedQuery) ||
+      normalizeRutForSearch(e.rut).includes(normalizedRutQuery)
+    );
+  });
 
   const handleSelectEmployee = (emp: Employee) => {
     onSelectEmployee(emp);

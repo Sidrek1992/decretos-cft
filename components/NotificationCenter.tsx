@@ -441,34 +441,24 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ records, employ
 
     return (
         <>
-            {/* Bell Button - Enhanced */}
+            {/* Bell Button - Unified subtle style */}
             <button
                 onClick={handleOpen}
-                className={`relative p-2.5 bg-white dark:bg-slate-800 border text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95 ${criticalCount > 0
-                    ? 'border-red-300 dark:border-red-700 shadow-red-100 dark:shadow-red-900/20'
-                    : 'border-slate-200 dark:border-slate-700'
-                    } ${bellBounce ? 'notification-bell-ring' : ''}`}
+                className={`relative p-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 ${bellBounce ? 'notification-bell-ring' : ''}`}
                 title="Notificaciones"
                 aria-label={`Notificaciones: ${unreadCount} sin leer`}
             >
-                {criticalCount > 0
-                    ? <BellRing className="w-4 h-4 sm:w-5 sm:h-5" />
-                    : <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-                }
+                <Bell className="w-5 h-5" />
 
-                {/* Badge */}
+                {/* Badge - Subtle and minimal */}
                 {unreadCount > 0 && (
-                    <span className={`absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-lg ${criticalCount > 0
-                        ? 'bg-gradient-to-r from-red-500 to-rose-600 notification-badge-pulse'
-                        : 'bg-gradient-to-r from-amber-400 to-amber-600'
-                        }`}>
-                        {unreadCount > 99 ? '99+' : unreadCount}
+                    <span className={`absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 text-[9px] font-semibold rounded-full flex items-center justify-center ${
+                        criticalCount > 0
+                            ? 'bg-red-500 text-white'
+                            : 'bg-slate-500 dark:bg-slate-400 text-white dark:text-slate-900'
+                    }`}>
+                        {unreadCount > 99 ? '99' : unreadCount}
                     </span>
-                )}
-
-                {/* Ping animation for critical */}
-                {criticalCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 rounded-full animate-ping opacity-40" />
                 )}
             </button>
 

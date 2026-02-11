@@ -5,6 +5,7 @@ import { Search, ArrowUpDown, ChevronUp, ChevronDown, UserCircle, LayoutGrid, Ch
 import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
+import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
 import { generateBatchPDFs, BatchMode, BatchProgressInfo } from '../services/batchPdfGenerator';
 import Pagination from './Pagination';
 import ActionMenu from './ActionMenu';
@@ -67,12 +68,14 @@ const PermitTable: React.FC<PermitTableProps> = ({
   };
 
   const filtered = useMemo(() => {
+    const normalizedTerm = normalizeSearchText(search);
+    const normalizedRutTerm = normalizeRutForSearch(search);
+
     return data.filter(r => {
-      const term = search.toLowerCase();
       const matchesSearch =
-        r.funcionario.toLowerCase().includes(term) ||
-        r.acto.toLowerCase().includes(term) ||
-        r.rut.includes(term);
+        normalizeSearchText(r.funcionario).includes(normalizedTerm) ||
+        normalizeSearchText(r.acto).includes(normalizedTerm) ||
+        normalizeRutForSearch(r.rut).includes(normalizedRutTerm);
       const matchesTab = activeTab === 'ALL' || r.solicitudType === activeTab;
 
       let matchesAdvanced = true;

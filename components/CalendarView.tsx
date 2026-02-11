@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { PermitRecord } from '../types';
 import { ChevronLeft, ChevronRight, Calendar, X, FileText, Search, RotateCcw } from 'lucide-react';
+import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
 
 interface CalendarViewProps {
     isOpen: boolean;
@@ -39,11 +40,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records })
 
     // Filtrar registros según tipo + búsqueda de empleado
     const filteredRecords = useMemo(() => {
+        const normalizedEmployeeSearch = normalizeSearchText(employeeSearch);
+        const normalizedRutSearch = normalizeRutForSearch(employeeSearch);
+
         return records.filter(r => {
             if (typeFilter !== 'todos' && r.solicitudType !== typeFilter) return false;
-            if (employeeSearch.trim()) {
-                const q = employeeSearch.trim().toLowerCase();
-                if (!r.funcionario.toLowerCase().includes(q) && !r.rut.includes(q)) return false;
+            if (normalizedEmployeeSearch) {
+                const matchesEmployee = normalizeSearchText(r.funcionario).includes(normalizedEmployeeSearch);
+                const matchesRut = normalizeRutForSearch(r.rut).includes(normalizedRutSearch);
+                if (!matchesEmployee && !matchesRut) return false;
             }
             return true;
         });

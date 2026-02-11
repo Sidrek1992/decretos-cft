@@ -1,20 +1,38 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { PermitRecord } from '../types';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, Legend, BarChart, Bar
+    PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts';
-import { TrendingUp, TrendingDown, Users, Calendar, AlertTriangle, ChevronRight, FileDown, Loader2, Activity, Clock } from 'lucide-react';
+import {
+    TrendingUp,
+    TrendingDown,
+    Users,
+    Calendar,
+    AlertTriangle,
+    ChevronRight,
+    FileDown,
+    Loader2,
+    Activity,
+    Clock,
+    X,
+    Sun,
+    Search,
+    ArrowUpDown,
+    ChevronLeft,
+    FileSpreadsheet,
+    FileText
+} from 'lucide-react';
 import { exportDashboardToPDF } from '../services/batchPdfGenerator';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
+import { normalizeSearchText } from '../utils/search';
 import { CONFIG } from '../config';
 
 interface DashboardProps {
     records: PermitRecord[];
     employees: { nombre: string; rut: string }[];
-    onViewLowBalance: () => void;
 }
 
 const COLORS = {
@@ -27,6 +45,54 @@ const COLORS = {
     flLight: '#f59e0b20'
 };
 
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+const getAnalyticsDays = (record: PermitRecord): number => {
+    const cantidadDias = Number(record.cantidadDias || 0);
+
+    if (record.solicitudType === 'FL') {
+        const solicitadoP1 = Number(record.solicitadoP1 ?? 0);
+        const solicitadoP2 = Number(record.solicitadoP2 ?? 0);
+        const solicitadoTotal = solicitadoP1 + solicitadoP2;
+
+        if (solicitadoTotal > 0) return solicitadoTotal;
+
+        // Para mantener consistencia con el registro de decretos,
+        // usar cantidadDias antes de inferir desde saldos.
+        if (cantidadDias > 0) return cantidadDias;
+
+        const saldoDispP1 = Number(record.saldoDisponibleP1 ?? 0);
+        const saldoFinalP1 = Number(record.saldoFinalP1 ?? 0);
+        const saldoDispP2 = Number(record.saldoDisponibleP2 ?? 0);
+        const saldoFinalP2 = Number(record.saldoFinalP2 ?? 0);
+        const usadoDesdeSaldos = Math.max(0, saldoDispP1 - saldoFinalP1) + Math.max(0, saldoDispP2 - saldoFinalP2);
+
+        if (usadoDesdeSaldos > 0) return usadoDesdeSaldos;
+    }
+
+    return cantidadDias;
+};
+
+// ---------------------------------------------------------------------------
+// Tipos para el panel de detalle
+// ---------------------------------------------------------------------------
+type KpiDetailType = 'solicitudes' | 'funcionarios' | 'dias' | 'usoPA' | 'feriados' | 'saldoBajo' | null;
+
+interface DetailData {
+    title: string;
+    subtitle: string;
+    items: Array<{
+        id: string;
+        primary: string;
+        secondary?: string;
+        value: string | number;
+        sortValue?: number;
+        valueColor?: string;
+        extra?: string;
+    }>;
+}
+
 // ---------------------------------------------------------------------------
 // Componentes auxiliares reutilizables
 // ---------------------------------------------------------------------------
@@ -35,6 +101,7 @@ interface KpiCardProps {
     label: string;
     value: string | number;
     sub?: string;
+    tooltip?: string;
     icon: React.ComponentType<{ className?: string }>;
     iconBg: string;
     iconColor: string;
@@ -44,9 +111,10 @@ interface KpiCardProps {
     highlight?: boolean;
 }
 
-const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, icon: Icon, iconBg, iconColor, borderColor = 'border-slate-200 dark:border-slate-700', trend, onClick, highlight }) => (
+const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, tooltip, icon: Icon, iconBg, iconColor, borderColor = 'border-slate-200 dark:border-slate-700', trend, onClick, highlight }) => (
     <div
         onClick={onClick}
+        title={tooltip}
         className={`bg-white dark:bg-slate-800 rounded-2xl p-4 border ${borderColor} transition-all hover:shadow-md ${onClick ? 'cursor-pointer group' : ''} ${highlight ? 'ring-2 ring-amber-400/60' : ''}`}
     >
         <div className="flex items-start justify-between">
@@ -97,13 +165,406 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
 };
 
 // ---------------------------------------------------------------------------
+// Panel de Detalle para KPIs
+// ---------------------------------------------------------------------------
+interface KpiDetailPanelProps {
+    data: DetailData | null;
+    onClose: () => void;
+}
+
+const KpiDetailPanel: React.FC<KpiDetailPanelProps> = ({ data, onClose }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState<'valor' | 'nombre'>('valor');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(8);
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+    const items = data?.items ?? [];
+
+    useEffect(() => {
+        if (!data) return;
+        setSearchTerm('');
+        setSortBy('valor');
+        setSortDirection('desc');
+        setCurrentPage(1);
+    }, [data?.title]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, sortBy, sortDirection, pageSize]);
+
+    const normalizedItems = useMemo(() => {
+        return items.map(item => {
+            const rawValue = typeof item.value === 'number'
+                ? item.value
+                : Number(String(item.value).replace(',', '.').replace(/[^0-9.-]/g, ''));
+
+            const computedSortValue = typeof item.sortValue === 'number'
+                ? item.sortValue
+                : Number.isFinite(rawValue)
+                    ? rawValue
+                    : 0;
+
+            return {
+                ...item,
+                computedSortValue
+            };
+        });
+    }, [items]);
+
+    const filteredItems = useMemo(() => {
+        const term = normalizeSearchText(searchTerm);
+        if (!term) return normalizedItems;
+
+        return normalizedItems.filter(item => {
+            const haystack = normalizeSearchText(`${item.primary} ${item.secondary || ''} ${item.extra || ''}`);
+            return haystack.includes(term);
+        });
+    }, [normalizedItems, searchTerm]);
+
+    const sortedItems = useMemo(() => {
+        const copy = [...filteredItems];
+
+        copy.sort((a, b) => {
+            let result = 0;
+
+            if (sortBy === 'nombre') {
+                result = a.primary.localeCompare(b.primary, 'es', { sensitivity: 'base' });
+            } else {
+                result = a.computedSortValue - b.computedSortValue;
+            }
+
+            return sortDirection === 'asc' ? result : -result;
+        });
+
+        return copy;
+    }, [filteredItems, sortBy, sortDirection]);
+
+    const totalPages = Math.max(1, Math.ceil(sortedItems.length / pageSize));
+
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
+
+    const pageStart = (currentPage - 1) * pageSize;
+    const pageItems = sortedItems.slice(pageStart, pageStart + pageSize);
+    const showingFrom = sortedItems.length === 0 ? 0 : pageStart + 1;
+    const showingTo = Math.min(pageStart + pageItems.length, sortedItems.length);
+
+    const safeTitle = useMemo(() => {
+        return (data?.title || 'detalle_kpi')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_|_$/g, '');
+    }, [data?.title]);
+
+    const escapeHtml = (value: string): string => {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
+    const handleExportExcel = useCallback(async () => {
+        if (!data || sortedItems.length === 0) return;
+
+        setIsExportingExcel(true);
+        try {
+            const XLSX = await import('xlsx');
+            const rows = sortedItems.map((item, idx) => ({
+                '#': idx + 1,
+                Nombre: item.primary,
+                Detalle: item.secondary || '',
+                Valor: item.value,
+                Extra: item.extra || ''
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            ws['!cols'] = [
+                { wch: 6 },
+                { wch: 30 },
+                { wch: 36 },
+                { wch: 18 },
+                { wch: 22 }
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Detalle KPI');
+            XLSX.writeFile(wb, `${safeTitle || 'detalle_kpi'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } catch (error) {
+            console.error('Error exportando detalle a Excel:', error);
+        } finally {
+            setIsExportingExcel(false);
+        }
+    }, [data, safeTitle, sortedItems]);
+
+    const handleExportPdf = useCallback(() => {
+        if (!data || sortedItems.length === 0) return;
+
+        setIsExportingPdf(true);
+
+        try {
+            const printWindow = window.open('', '_blank', 'width=1100,height=800');
+            if (!printWindow) return;
+
+            const dateLabel = new Date().toLocaleString('es-CL');
+            const rowsHtml = sortedItems
+                .map((item, idx) => `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td>${escapeHtml(item.primary)}</td>
+                        <td>${escapeHtml(item.secondary || '—')}</td>
+                        <td>${escapeHtml(String(item.value))}</td>
+                        <td>${escapeHtml(item.extra || '—')}</td>
+                    </tr>
+                `)
+                .join('');
+
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${escapeHtml(data.title)}</title>
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 28px; color: #1e293b; }
+                        h1 { margin: 0; font-size: 22px; font-weight: 800; }
+                        .subtitle { margin: 6px 0 20px; font-size: 12px; color: #64748b; }
+                        .meta { margin-bottom: 20px; font-size: 11px; color: #94a3b8; }
+                        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                        th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: top; }
+                        th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
+                        tr:nth-child(even) { background: #f8fafc; }
+                        @media print { body { padding: 12px; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>${escapeHtml(data.title)}</h1>
+                    <p class="subtitle">${escapeHtml(data.subtitle)}</p>
+                    <p class="meta">Generado el ${escapeHtml(dateLabel)} · ${sortedItems.length} registros</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Nombre</th>
+                                <th>Detalle</th>
+                                <th>Valor</th>
+                                <th>Extra</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                    <script>
+                        window.onload = function() {
+                            setTimeout(function() {
+                                window.print();
+                                window.close();
+                            }, 300);
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        } catch (error) {
+            console.error('Error exportando detalle a PDF:', error);
+        } finally {
+            setIsExportingPdf(false);
+        }
+    }, [data, sortedItems]);
+
+    if (!data) return null;
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-lg animate-in slide-in-from-top-2 duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                <div>
+                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
+                        {data.title}
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">
+                        {data.subtitle}
+                    </p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                    title="Cerrar detalle"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+
+            {/* Controles */}
+            <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800">
+                <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
+                    <div className="relative w-full lg:max-w-sm">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            placeholder="Buscar por nombre, detalle o extra"
+                            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                        />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-slate-100 dark:bg-slate-700/60">
+                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                            <select
+                                value={sortBy}
+                                onChange={e => setSortBy(e.target.value as 'valor' | 'nombre')}
+                                className="bg-transparent text-[11px] font-bold text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
+                            >
+                                <option value="valor">Ordenar por valor</option>
+                                <option value="nombre">Ordenar por nombre</option>
+                            </select>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700/60 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            title="Cambiar dirección de orden"
+                        >
+                            {sortDirection === 'asc' ? 'Asc' : 'Desc'}
+                        </button>
+
+                        <select
+                            value={pageSize}
+                            onChange={e => setPageSize(Number(e.target.value))}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700/60 text-[11px] font-black text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
+                            title="Registros por página"
+                        >
+                            <option value={8}>8 / pág</option>
+                            <option value={12}>12 / pág</option>
+                            <option value={20}>20 / pág</option>
+                        </select>
+
+                        <button
+                            type="button"
+                            onClick={handleExportExcel}
+                            disabled={isExportingExcel || sortedItems.length === 0}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-[11px] font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 transition-colors"
+                            title="Exportar detalle a Excel"
+                        >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            {isExportingExcel ? 'Exportando...' : 'Excel'}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleExportPdf}
+                            disabled={isExportingPdf || sortedItems.length === 0}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-[11px] font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 disabled:opacity-50 transition-colors"
+                            title="Exportar detalle a PDF"
+                        >
+                            <FileText className="w-3.5 h-3.5" />
+                            {isExportingPdf ? 'Exportando...' : 'PDF'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="max-h-80 overflow-y-auto">
+                {pageItems.length > 0 ? (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {pageItems.map((item, idx) => (
+                            <div
+                                key={`${item.id}-${pageStart + idx}`}
+                                className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
+                            >
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[10px] font-black text-slate-500 dark:text-slate-400">
+                                        {pageStart + idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">
+                                            {item.primary}
+                                        </p>
+                                        {item.secondary && (
+                                            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                                                {item.secondary}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-right shrink-0 ml-3">
+                                    <p className={`text-sm font-black ${item.valueColor || 'text-slate-800 dark:text-white'}`}>
+                                        {item.value}
+                                    </p>
+                                    {item.extra && (
+                                        <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                                            {item.extra}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="py-12 text-center">
+                        <p className="text-sm text-slate-400 dark:text-slate-500">
+                            {searchTerm ? 'Sin resultados para la búsqueda actual' : 'Sin datos disponibles'}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer con paginación */}
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                    Mostrando {showingFrom}-{showingTo} de {sortedItems.length} {sortedItems.length === 1 ? 'registro' : 'registros'}
+                </p>
+
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage <= 1}
+                        className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Página anterior"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 min-w-[64px] text-center">
+                        {currentPage} / {totalPages}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage >= totalPages}
+                        className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        title="Página siguiente"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ---------------------------------------------------------------------------
 // Dashboard principal
 // ---------------------------------------------------------------------------
 
-const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBalance }) => {
+const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
     const [isExporting, setIsExporting] = useState(false);
     const [yearFilter, setYearFilter] = useState<number>(() => new Date().getFullYear());
+    const [monthFilter, setMonthFilter] = useState<number | 'all'>('all');
     const [topFilter, setTopFilter] = useState<'todos' | 'PA' | 'FL'>('todos');
+    const [activeDetail, setActiveDetail] = useState<KpiDetailType>(null);
 
     const handleExportPDF = async () => {
         setIsExporting(true);
@@ -129,52 +590,49 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
         return [...years].sort((a, b) => b - a);
     }, [records]);
 
+    // Título dinámico del período seleccionado
+    const periodLabel = useMemo(() => {
+        if (monthFilter === 'all') return `${yearFilter}`;
+        return `${MONTH_NAMES_FULL[monthFilter]} ${yearFilter}`;
+    }, [yearFilter, monthFilter]);
+
     // ---------------------------------------------------------------------------
     // Cálculos centralizados
     // ---------------------------------------------------------------------------
     const stats = useMemo(() => {
-        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
-
         // Filtrar por año seleccionado
-        const filtered = records.filter(r => {
+        const filteredByYear = records.filter(r => {
             if (!r.fechaInicio) return false;
             return new Date(r.fechaInicio + 'T12:00:00').getFullYear() === yearFilter;
         });
 
+        // Filtrar también por mes si está seleccionado
+        const filtered = monthFilter === 'all'
+            ? filteredByYear
+            : filteredByYear.filter(r => {
+                const d = new Date(r.fechaInicio + 'T12:00:00');
+                return d.getMonth() === monthFilter;
+            });
+
         // --- Mensuales (12 meses del año filtrado) ---
         const months: Record<string, { PA: number; FL: number; total: number }> = {};
         for (let m = 0; m < 12; m++) {
-            months[`${monthNames[m]}`] = { PA: 0, FL: 0, total: 0 };
+            months[`${MONTH_NAMES[m]}`] = { PA: 0, FL: 0, total: 0 };
         }
-        filtered.forEach(r => {
+        filteredByYear.forEach(r => {
+            if (r.solicitudType !== 'PA' && r.solicitudType !== 'FL') return;
             const m = new Date(r.fechaInicio + 'T12:00:00').getMonth();
-            const key = monthNames[m];
-            months[key][r.solicitudType] += r.cantidadDias;
-            months[key].total += r.cantidadDias;
+            const key = MONTH_NAMES[m];
+            const days = getAnalyticsDays(r);
+            months[key][r.solicitudType] += days;
+            months[key].total += days;
         });
         const monthlyData = Object.entries(months).map(([name, data]) => ({ name, ...data }));
 
-        // --- Este mes (siempre sobre datos reales, no filtro de año) ---
-        const thisMonthRecords = records.filter(r => {
-            if (!r.fechaInicio) return false;
-            const d = new Date(r.fechaInicio + 'T12:00:00');
-            return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-        });
-        const lastMonthRecords = records.filter(r => {
-            if (!r.fechaInicio) return false;
-            const d = new Date(r.fechaInicio + 'T12:00:00');
-            const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-            const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-            return d.getFullYear() === prevYear && d.getMonth() === prevMonth;
-        });
-
-        // --- Conteos globales (sin filtro de año, para KPIs principales) ---
+        // --- Datos del período filtrado (año o año+mes) ---
         let paCount = 0, flCount = 0, totalDays = 0;
         const uniqueRuts = new Set<string>();
-        const byEmployee: Record<string, { nombre: string; diasPA: number; diasFL: number; totalDias: number }> = {};
+        const byEmployee: Record<string, { nombre: string; rut: string; diasPA: number; diasFL: number; totalDias: number; registros: number }> = {};
 
         // Último registro por RUT por tipo → para saldo
         const lastByRutPA: Record<string, PermitRecord> = {};
@@ -183,35 +641,42 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
 
         sortedByCreated.forEach(r => {
             if (r.solicitudType === 'PA') {
-                paCount++;
                 if (!lastByRutPA[r.rut]) lastByRutPA[r.rut] = r;
-            } else {
-                flCount++;
+            } else if (r.solicitudType === 'FL') {
                 if (!lastByRutFL[r.rut]) lastByRutFL[r.rut] = r;
             }
-            totalDays += r.cantidadDias;
-            uniqueRuts.add(r.rut);
-
-            if (!byEmployee[r.rut]) byEmployee[r.rut] = { nombre: r.funcionario, diasPA: 0, diasFL: 0, totalDias: 0 };
-            if (r.solicitudType === 'PA') byEmployee[r.rut].diasPA += r.cantidadDias;
-            else byEmployee[r.rut].diasFL += r.cantidadDias;
-            byEmployee[r.rut].totalDias += r.cantidadDias;
         });
 
-        // --- Top funcionarios con saldo (sin slice — se filtra después según topFilter) ---
+        // Contar sobre datos filtrados
+        filtered.forEach(r => {
+            const days = getAnalyticsDays(r);
+            if (r.solicitudType === 'PA') paCount++;
+            else if (r.solicitudType === 'FL') flCount++;
+            else return;
+            totalDays += days;
+            uniqueRuts.add(r.rut);
+
+            if (!byEmployee[r.rut]) {
+                byEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, diasPA: 0, diasFL: 0, totalDias: 0, registros: 0 };
+            }
+            if (r.solicitudType === 'PA') byEmployee[r.rut].diasPA += days;
+            else if (r.solicitudType === 'FL') byEmployee[r.rut].diasFL += days;
+            byEmployee[r.rut].totalDias += days;
+            byEmployee[r.rut].registros++;
+        });
+
+        // --- Top funcionarios con saldo ---
         const allFuncionarios = Object.entries(byEmployee)
             .map(([rut, emp]) => {
                 const lastPA = lastByRutPA[rut];
                 const lastFL = lastByRutFL[rut];
                 const saldoPA = lastPA ? (lastPA.diasHaber - lastPA.cantidadDias) : null;
-                const saldoFL = lastFL
-                    ? getFLSaldoFinal(lastFL, null)
-                    : null;
-                return { ...emp, rut, saldoPA, saldoFL };
+                const saldoFL = lastFL ? getFLSaldoFinal(lastFL, null) : null;
+                return { ...emp, saldoPA, saldoFL };
             })
             .sort((a, b) => b.totalDias - a.totalDias);
 
-        // --- Saldo bajo (<2 días) ---
+        // --- Saldo bajo (<2 días) - siempre global ---
         const lowBalance: Array<{ nombre: string; rut: string; saldo: number; tipo: string }> = [];
         Object.entries(lastByRutPA).forEach(([rut, r]) => {
             const saldo = r.diasHaber - r.cantidadDias;
@@ -239,21 +704,89 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
             .slice(0, 5)
             .map(e => ({ nombre: e.nombre.split(' ')[0], PA: e.diasPA, FL: e.diasFL }));
 
-        // --- Tendencia mes vs mes ---
-        const thisMonthDays = thisMonthRecords.reduce((a, r) => a + r.cantidadDias, 0);
-        const lastMonthDays = lastMonthRecords.reduce((a, r) => a + r.cantidadDias, 0);
-        const monthTrend = lastMonthDays === 0 ? 0 : ((thisMonthDays - lastMonthDays) / lastMonthDays) * 100;
+        // --- Tendencia dinámica según filtro (mes/año) ---
+        const requestCount = paCount + flCount;
+        const previousPeriodInfo = (() => {
+            if (monthFilter === 'all') {
+                const count = records.filter(r => {
+                    if (!r.fechaInicio) return false;
+                    if (r.solicitudType !== 'PA' && r.solicitudType !== 'FL') return false;
+                    const d = new Date(r.fechaInicio + 'T12:00:00');
+                    return d.getFullYear() === yearFilter - 1;
+                }).length;
+                return {
+                    count,
+                    label: `${yearFilter - 1}`,
+                    comparisonLabel: 'vs año anterior'
+                };
+            }
+
+            const previousMonth = monthFilter === 0 ? 11 : monthFilter - 1;
+            const previousYear = monthFilter === 0 ? yearFilter - 1 : yearFilter;
+
+            const count = records.filter(r => {
+                if (!r.fechaInicio) return false;
+                if (r.solicitudType !== 'PA' && r.solicitudType !== 'FL') return false;
+                const d = new Date(r.fechaInicio + 'T12:00:00');
+                return d.getFullYear() === previousYear && d.getMonth() === previousMonth;
+            }).length;
+            return {
+                count,
+                label: `${MONTH_NAMES_FULL[previousMonth]} ${previousYear}`,
+                comparisonLabel: 'vs mes anterior'
+            };
+        })();
+
+        const hasTrendBase = previousPeriodInfo.count > 0;
+        const trendValue = hasTrendBase
+            ? ((requestCount - previousPeriodInfo.count) / previousPeriodInfo.count) * 100
+            : 0;
+        const solicitudesTrend = hasTrendBase
+            ? {
+                value: trendValue,
+                label: `${trendValue >= 0 ? '+' : ''}${trendValue.toFixed(0)}% ${previousPeriodInfo.comparisonLabel}`
+            }
+            : null;
+
+        const currentPeriodLabel = monthFilter === 'all'
+            ? `${yearFilter}`
+            : `${MONTH_NAMES_FULL[monthFilter]} ${yearFilter}`;
+
+        const solicitudesTrendTooltip = hasTrendBase
+            ? `Período actual: ${currentPeriodLabel} (${requestCount} solicitudes). Comparado con ${previousPeriodInfo.label} (${previousPeriodInfo.count} solicitudes).`
+            : `Período actual: ${currentPeriodLabel} (${requestCount} solicitudes). Sin base de comparación en ${previousPeriodInfo.label}.`;
 
         // --- % uso saldo PA (promedio sobre empleados con registros PA) ---
-        const paEmployees = Object.keys(lastByRutPA);
+        const paEmployeesWithBalance = Object.keys(lastByRutPA);
         let totalUsagePercent = 0;
-        paEmployees.forEach(rut => {
+        paEmployeesWithBalance.forEach(rut => {
             const last = lastByRutPA[rut];
             const base = CONFIG.BASE_DAYS.PA;
             const used = base - last.diasHaber;
             totalUsagePercent += base > 0 ? (used / base) * 100 : 0;
         });
-        const avgUsagePercent = paEmployees.length > 0 ? totalUsagePercent / paEmployees.length : 0;
+        const avgUsagePercent = paEmployeesWithBalance.length > 0 ? totalUsagePercent / paEmployeesWithBalance.length : 0;
+
+        // --- Datos para paneles de detalle ---
+        const filteredRecords = filtered;
+        const paRecords = filteredRecords.filter(r => r.solicitudType === 'PA');
+        const flRecords = filteredRecords.filter(r => r.solicitudType === 'FL');
+
+        // Uso PA por empleado
+        const usoPAByEmployee = paEmployeesWithBalance.map(rut => {
+            const last = lastByRutPA[rut];
+            const base = CONFIG.BASE_DAYS.PA;
+            const used = base - last.diasHaber;
+            const pct = base > 0 ? (used / base) * 100 : 0;
+            return {
+                rut,
+                nombre: last.funcionario,
+                usado: used,
+                base,
+                saldo: last.diasHaber - last.cantidadDias,
+                porcentaje: pct
+            };
+        }).sort((a, b) => b.porcentaje - a.porcentaje);
 
         return {
             monthlyData,
@@ -265,27 +798,34 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
             flCount,
             totalDays,
             activeEmployees: uniqueRuts.size,
-            averageDaysPerRequest: records.length === 0 ? '0' : (totalDays / records.length).toFixed(1),
-            thisMonthCount: thisMonthRecords.length,
-            thisMonthDays,
-            monthTrend,
-            avgUsagePercent
+            averageDaysPerRequest: filtered.length === 0 ? '0' : (totalDays / filtered.length).toFixed(1),
+            requestCount,
+            solicitudesTrend,
+            solicitudesTrendTooltip,
+            avgUsagePercent,
+            // Data for detail panels
+            filteredRecords,
+            paRecords,
+            flRecords,
+            usoPAByEmployee,
+            byEmployee: Object.values(byEmployee)
         };
-    }, [records, yearFilter]);
+    }, [records, yearFilter, monthFilter]);
 
     const {
         monthlyData, typeDistribution, allFuncionarios,
         lowBalance, comparativaEmpleados,
         totalDays, activeEmployees, averageDaysPerRequest,
-        thisMonthCount, thisMonthDays, monthTrend, avgUsagePercent
+        requestCount, solicitudesTrend, solicitudesTrendTooltip, avgUsagePercent,
+        filteredRecords, paRecords, flRecords, usoPAByEmployee, byEmployee
     } = stats;
 
-    // Filtrado del Top según topFilter — se recalcula solo cuando cambia el filtro
+    // Filtrado del Top según topFilter
     const { topFuncionarios, maxDias } = useMemo(() => {
         const filtered = allFuncionarios.filter(emp => {
             if (topFilter === 'PA') return emp.diasPA > 0;
             if (topFilter === 'FL') return emp.diasFL > 0;
-            return true; // 'todos'
+            return true;
         }).sort((a, b) => {
             if (topFilter === 'PA') return b.diasPA - a.diasPA;
             if (topFilter === 'FL') return b.diasFL - a.diasFL;
@@ -298,6 +838,119 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
 
         return { topFuncionarios: filtered, maxDias: max };
     }, [allFuncionarios, topFilter]);
+
+    // ---------------------------------------------------------------------------
+    // Datos para el panel de detalle
+    // ---------------------------------------------------------------------------
+    const detailData: DetailData | null = useMemo(() => {
+        if (!activeDetail) return null;
+
+        switch (activeDetail) {
+            case 'solicitudes':
+                return {
+                    title: `Solicitudes — ${periodLabel}`,
+                    subtitle: `${filteredRecords.length} registros en el período`,
+                    items: filteredRecords.map(r => {
+                        const days = getAnalyticsDays(r);
+                        return {
+                            id: r.id,
+                            primary: r.funcionario,
+                            secondary: `${r.solicitudType} · Acto ${r.acto || '—'}`,
+                            value: `${days} días`,
+                            sortValue: days,
+                            valueColor: r.solicitudType === 'PA' ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400',
+                            extra: r.fechaInicio
+                        };
+                    })
+                };
+
+            case 'funcionarios':
+                return {
+                    title: `Funcionarios Activos — ${periodLabel}`,
+                    subtitle: `${activeEmployees} de ${employees.length} en base`,
+                    items: byEmployee.map(emp => ({
+                        id: emp.rut,
+                        primary: emp.nombre,
+                        secondary: `${emp.registros} solicitud${emp.registros > 1 ? 'es' : ''}`,
+                        value: `${emp.totalDias} días`,
+                        sortValue: emp.totalDias,
+                        extra: `PA: ${emp.diasPA} · FL: ${emp.diasFL}`
+                    }))
+                };
+
+            case 'dias':
+                return {
+                    title: `Días Otorgados — ${periodLabel}`,
+                    subtitle: `Total: ${totalDays} días`,
+                    items: byEmployee.map(emp => ({
+                        id: emp.rut,
+                        primary: emp.nombre,
+                        secondary: `PA: ${emp.diasPA} días · FL: ${emp.diasFL} días`,
+                        value: `${emp.totalDias} días`,
+                        sortValue: emp.totalDias,
+                        valueColor: emp.totalDias > 10 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                    }))
+                };
+
+            case 'usoPA':
+                return {
+                    title: 'Uso de Saldo PA',
+                    subtitle: `Promedio: ${avgUsagePercent.toFixed(0)}% utilizado`,
+                    items: usoPAByEmployee.map(emp => ({
+                        id: emp.rut,
+                        primary: emp.nombre,
+                        secondary: `Usado: ${emp.usado.toFixed(1)} de ${emp.base} días`,
+                        value: `${emp.porcentaje.toFixed(0)}%`,
+                        sortValue: emp.porcentaje,
+                        valueColor: emp.porcentaje > 80 ? 'text-red-600 dark:text-red-400' : emp.porcentaje > 50 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400',
+                        extra: `Saldo: ${emp.saldo.toFixed(1)} días`
+                    }))
+                };
+
+            case 'feriados':
+                return {
+                    title: `Feriados Legales — ${periodLabel}`,
+                    subtitle: `${flRecords.length} registros FL`,
+                    items: flRecords.map(r => {
+                        const days = getAnalyticsDays(r);
+                        return {
+                            id: r.id,
+                            primary: r.funcionario,
+                            secondary: `Acto ${r.acto || '—'} · ${r.fechaInicio}`,
+                            value: `${days} días`,
+                            sortValue: days,
+                            valueColor: 'text-amber-600 dark:text-amber-400',
+                            extra: r.periodo || '—'
+                        };
+                    })
+                };
+
+            case 'saldoBajo':
+                return {
+                    title: 'Saldo Bajo Crítico',
+                    subtitle: `${lowBalance.length} funcionarios con menos de 2 días disponibles`,
+                    items: lowBalance.map(emp => ({
+                        id: `${emp.rut}-${emp.tipo}`,
+                        primary: emp.nombre,
+                        secondary: `${emp.tipo} · ${emp.rut}`,
+                        value: `${emp.saldo.toFixed(1)} días`,
+                        sortValue: emp.saldo,
+                        valueColor: emp.saldo < 0
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-amber-600 dark:text-amber-400',
+                        extra: emp.saldo < 0 ? 'Saldo negativo' : 'Disponible'
+                    }))
+                };
+
+            default:
+                return null;
+        }
+    }, [activeDetail, periodLabel, filteredRecords, byEmployee, activeEmployees, employees.length, totalDays, avgUsagePercent, usoPAByEmployee, flRecords, lowBalance]);
+
+    // Handlers para abrir detalles
+    const openDetail = useCallback((type: KpiDetailType) => {
+        setActiveDetail(prev => prev === type ? null : type);
+    }, []);
 
     // ---------------------------------------------------------------------------
     // Render
@@ -314,20 +967,38 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                     <div>
                         <h2 className="text-lg font-black text-slate-900 dark:text-white">Panel de Analytics</h2>
                         <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                            Estadísticas y tendencias
+                            {periodLabel}
                         </p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     {/* Filtro de año */}
                     <select
                         value={yearFilter}
-                        onChange={e => setYearFilter(Number(e.target.value))}
+                        onChange={e => {
+                            setYearFilter(Number(e.target.value));
+                            setActiveDetail(null);
+                        }}
                         className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-black px-3 py-2 rounded-xl outline-none focus:border-indigo-500 cursor-pointer"
                     >
                         {availableYears.map(y => (
                             <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
+
+                    {/* Filtro de mes */}
+                    <select
+                        value={monthFilter}
+                        onChange={e => {
+                            setMonthFilter(e.target.value === 'all' ? 'all' : Number(e.target.value));
+                            setActiveDetail(null);
+                        }}
+                        className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-black px-3 py-2 rounded-xl outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                        <option value="all">Todo el año</option>
+                        {MONTH_NAMES_FULL.map((name, idx) => (
+                            <option key={idx} value={idx}>{name}</option>
                         ))}
                     </select>
 
@@ -346,16 +1017,18 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                 </div>
             </div>
 
-            {/* ─── KPIs Row (6 cards, 3 cols en mobile, 6 en desktop) ─── */}
+            {/* ─── KPIs Row (6 cards, todas clickeables) ─── */}
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <KpiCard
-                    label="Solicitudes este mes"
-                    value={thisMonthCount}
-                    sub={`${thisMonthDays} días solicitados`}
+                    label={monthFilter === 'all' ? 'Solicitudes del año' : 'Solicitudes del mes'}
+                    value={requestCount}
+                    sub={`${totalDays} días solicitados`}
+                    tooltip={solicitudesTrendTooltip}
                     icon={Calendar}
                     iconBg="bg-indigo-50 dark:bg-indigo-900/40"
                     iconColor="text-indigo-600 dark:text-indigo-400"
-                    trend={{ value: monthTrend, label: `${monthTrend >= 0 ? '+' : ''}${monthTrend.toFixed(0)}% vs mes anterior` }}
+                    trend={solicitudesTrend ?? undefined}
+                    onClick={() => openDetail('solicitudes')}
                 />
                 <KpiCard
                     label="Funcionarios activos"
@@ -364,14 +1037,16 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                     icon={Users}
                     iconBg="bg-slate-100 dark:bg-slate-700/50"
                     iconColor="text-slate-600 dark:text-slate-300"
+                    onClick={() => openDetail('funcionarios')}
                 />
                 <KpiCard
                     label="Total días otorgados"
                     value={totalDays}
-                    sub={`Promedio ${averageDaysPerRequest} días/solicitud`}
+                    sub={`Promedio ${averageDaysPerRequest} días/solic.`}
                     icon={Activity}
                     iconBg="bg-emerald-50 dark:bg-emerald-900/40"
                     iconColor="text-emerald-600 dark:text-emerald-400"
+                    onClick={() => openDetail('dias')}
                 />
                 <KpiCard
                     label="Uso saldo PA"
@@ -381,14 +1056,16 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                     iconBg="bg-purple-50 dark:bg-purple-900/40"
                     iconColor="text-purple-600 dark:text-purple-400"
                     trend={{ value: 100 - avgUsagePercent, label: `${(100 - avgUsagePercent).toFixed(0)}% libre` }}
+                    onClick={() => openDetail('usoPA')}
                 />
                 <KpiCard
                     label="Feriados Legales"
                     value={stats.flCount}
-                    sub="Total registros FL"
-                    icon={Calendar}
+                    sub={`${flRecords.reduce((a, r) => a + getAnalyticsDays(r), 0)} días FL`}
+                    icon={Sun}
                     iconBg="bg-amber-50 dark:bg-amber-900/40"
                     iconColor="text-amber-600 dark:text-amber-400"
+                    onClick={() => openDetail('feriados')}
                 />
                 <KpiCard
                     label="Saldo bajo"
@@ -399,9 +1076,17 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                     iconColor={lowBalance.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500'}
                     borderColor={lowBalance.length > 0 ? 'border-amber-200 dark:border-amber-800' : 'border-slate-200 dark:border-slate-700'}
                     highlight={lowBalance.length > 0}
-                    onClick={onViewLowBalance}
+                    onClick={() => openDetail('saldoBajo')}
                 />
             </div>
+
+            {/* ─── Panel de Detalle (aparece al hacer click en un KPI) ─── */}
+            {activeDetail && (
+                <KpiDetailPanel
+                    data={detailData}
+                    onClose={() => setActiveDetail(null)}
+                />
+            )}
 
             {/* ─── Gráficos principales: Area (tendencia) + Pie (distribución) ─── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -448,7 +1133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                 {/* Pie — Distribución PA vs FL */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 flex flex-col">
                     <h3 className="text-sm font-black text-slate-700 dark:text-slate-200 mb-2 uppercase tracking-wider">
-                        Distribución por tipo
+                        Distribución — {periodLabel}
                     </h3>
                     <div className="flex-1 flex flex-col items-center justify-center">
                         <div className="h-44 w-full">
@@ -504,7 +1189,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                         <div className="flex items-center gap-3">
                             <Users className="w-5 h-5 text-indigo-500" />
                             <h3 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                                Top funcionarios
+                                Top funcionarios — {periodLabel}
                             </h3>
                         </div>
                         {/* Filtro PA / FL / Todos */}
@@ -531,7 +1216,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                         </div>
                     </div>
 
-                    {/* Header de la tabla mini — adaptativo según filtro */}
+                    {/* Header de la tabla mini */}
                     {topFilter === 'todos' ? (
                         <div className="grid grid-cols-[24px_1fr_60px_60px_60px] gap-x-3 items-center px-1 mb-2">
                             <span />
@@ -551,7 +1236,6 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
 
                     <div className="space-y-2.5">
                         {topFuncionarios.map((emp, i) => {
-                            // Días y barra según filtro activo
                             const diasMostrar = topFilter === 'PA' ? emp.diasPA : topFilter === 'FL' ? emp.diasFL : emp.totalDias;
                             const barPercent = maxDias > 0 ? (diasMostrar / maxDias) * 100 : 0;
                             const barColor = topFilter === 'PA' ? COLORS.PA : topFilter === 'FL' ? COLORS.FL : `linear-gradient(90deg, ${COLORS.PA}, ${COLORS.FL})`;
@@ -559,7 +1243,6 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                                 ? { background: barColor }
                                 : { backgroundColor: barColor };
 
-                            // Saldo según filtro
                             const saldoPA = emp.saldoPA !== null ? emp.saldoPA.toFixed(1) : '—';
                             const saldoFL = emp.saldoFL !== null ? emp.saldoFL.toFixed(1) : '—';
                             const saldoLabel = topFilter === 'PA' ? saldoPA
@@ -592,7 +1275,6 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                                             <p className={`text-sm font-black text-center ${saldoColor}`}>{saldoLabel}</p>
                                         </div>
                                     )}
-                                    {/* Barra de progreso */}
                                     <div className="mt-1.5 ml-7 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                         <div
                                             className="h-full rounded-full transition-all duration-500"
@@ -607,7 +1289,6 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees, onViewLowBala
                         )}
                     </div>
 
-                    {/* Nota del saldo */}
                     <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-4 px-1">
                         Saldo: {topFilter === 'todos' ? 'PA / FL' : topFilter}. Valor amarillo = menos de 2 días disponibles.
                     </p>

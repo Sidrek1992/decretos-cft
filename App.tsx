@@ -52,8 +52,297 @@ import { appendAuditLog } from './utils/audit';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
-  Database, CheckCircle, Users, AlertCircle, Moon, Sun, Undo2, Keyboard, CalendarDays, Palette, Printer, LogOut, Settings
+  Database, CheckCircle, Users, AlertCircle, Moon, Sun, Undo2, Keyboard, CalendarDays, Palette, Printer, LogOut, Settings,
+  Menu, X, ChevronDown, ChevronRight, Zap, Shield, Eye
 } from 'lucide-react';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MOBILE MENU COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════
+interface MobileMenuProps {
+  isOpen: boolean;
+  onClose: () => void;
+  // Actions
+  onSync: () => void;
+  onUndo: () => void;
+  canUndo: boolean;
+  onToggleDashboard: () => void;
+  showDashboard: boolean;
+  onOpenDecreeBook: () => void;
+  onOpenCalendar: () => void;
+  onOpenEmployeeList: () => void;
+  onExportExcel: () => void;
+  onOpenSheetPA: () => void;
+  onOpenSheetFL: () => void;
+  onOpenSheet2P: () => void;
+  onPrint: () => void;
+  onToggleDarkMode: () => void;
+  isDark: boolean;
+  onOpenThemeSelector: () => void;
+  onOpenShortcuts: () => void;
+  onOpenAdminPanel: () => void;
+  onSignOut: () => void;
+  // State
+  isSyncing: boolean;
+  syncError: boolean;
+  isOnline: boolean;
+  employeesCount: number;
+  userEmail?: string;
+  role: string;
+  roleLabel: string;
+  roleColors: { bg: string; text: string };
+  canExportExcel: boolean;
+  isAdmin: boolean;
+}
+
+const MobileMenu: React.FC<MobileMenuProps> = ({
+  isOpen,
+  onClose,
+  onSync,
+  onUndo,
+  canUndo,
+  onToggleDashboard,
+  showDashboard,
+  onOpenDecreeBook,
+  onOpenCalendar,
+  onOpenEmployeeList,
+  onExportExcel,
+  onOpenSheetPA,
+  onOpenSheetFL,
+  onOpenSheet2P,
+  onPrint,
+  onToggleDarkMode,
+  isDark,
+  onOpenThemeSelector,
+  onOpenShortcuts,
+  onOpenAdminPanel,
+  onSignOut,
+  isSyncing,
+  syncError,
+  isOnline,
+  employeesCount,
+  userEmail,
+  role,
+  roleLabel,
+  roleColors,
+  canExportExcel,
+  isAdmin,
+}) => {
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>('vistas');
+
+  const handleClose = useCallback(() => {
+    setIsAnimatingOut(true);
+    setTimeout(() => {
+      onClose();
+      setIsAnimatingOut(false);
+    }, 250);
+  }, [onClose]);
+
+  const handleAction = useCallback((action: () => void) => {
+    action();
+    handleClose();
+  }, [handleClose]);
+
+  if (!isOpen) return null;
+
+  const sections = [
+    {
+      id: 'vistas',
+      label: 'Vistas',
+      icon: <Eye className="w-4 h-4" />,
+      gradient: 'from-indigo-500 to-purple-500',
+      items: [
+        { label: 'Dashboard', icon: <BarChart3 className="w-5 h-5" />, action: onToggleDashboard, active: showDashboard, color: 'text-indigo-600 dark:text-indigo-400' },
+        { label: 'Libro de Decretos', icon: <BookOpen className="w-5 h-5" />, action: onOpenDecreeBook, color: 'text-amber-600 dark:text-amber-400' },
+        { label: 'Calendario', icon: <CalendarDays className="w-5 h-5" />, action: onOpenCalendar, color: 'text-sky-600 dark:text-sky-400' },
+        { label: `Personal (${employeesCount})`, icon: <Users className="w-5 h-5" />, action: onOpenEmployeeList, color: 'text-emerald-600 dark:text-emerald-400' },
+      ]
+    },
+    {
+      id: 'datos',
+      label: 'Datos',
+      icon: <Database className="w-4 h-4" />,
+      gradient: 'from-emerald-500 to-teal-500',
+      items: [
+        { label: isSyncing ? 'Sincronizando...' : 'Sincronizar', icon: <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />, action: onSync, disabled: isSyncing, color: syncError ? 'text-red-500' : 'text-indigo-600 dark:text-indigo-400' },
+        ...(canUndo ? [{ label: 'Deshacer', icon: <Undo2 className="w-5 h-5" />, action: onUndo, color: 'text-amber-600 dark:text-amber-400' }] : []),
+      ]
+    },
+    {
+      id: 'exportar',
+      label: 'Exportar',
+      icon: <FileSpreadsheet className="w-4 h-4" />,
+      gradient: 'from-emerald-500 to-green-500',
+      items: [
+        { label: 'Exportar Excel', icon: <FileSpreadsheet className="w-5 h-5" />, action: onExportExcel, disabled: !canExportExcel, color: 'text-emerald-600 dark:text-emerald-400' },
+        { label: 'Hoja PA (Google)', icon: <ExternalLink className="w-5 h-5" />, action: onOpenSheetPA, color: 'text-indigo-600 dark:text-indigo-400' },
+        { label: 'Hoja FL (Google)', icon: <ExternalLink className="w-5 h-5" />, action: onOpenSheetFL, color: 'text-emerald-600 dark:text-emerald-400' },
+        { label: 'Hoja 2P (Google)', icon: <ExternalLink className="w-5 h-5" />, action: onOpenSheet2P, color: 'text-amber-600 dark:text-amber-400' },
+        { label: 'Imprimir', icon: <Printer className="w-5 h-5" />, action: onPrint, color: 'text-slate-600 dark:text-slate-400' },
+      ]
+    },
+    {
+      id: 'preferencias',
+      label: 'Preferencias',
+      icon: <Palette className="w-4 h-4" />,
+      gradient: 'from-violet-500 to-purple-500',
+      items: [
+        { label: isDark ? 'Modo Claro' : 'Modo Oscuro', icon: isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />, action: onToggleDarkMode, color: 'text-amber-600 dark:text-amber-400' },
+        { label: 'Personalizar Tema', icon: <Palette className="w-5 h-5" />, action: onOpenThemeSelector, color: 'text-violet-600 dark:text-violet-400' },
+        { label: 'Atajos de Teclado', icon: <Keyboard className="w-5 h-5" />, action: onOpenShortcuts, color: 'text-slate-600 dark:text-slate-400' },
+      ]
+    },
+  ];
+
+  return (
+    <div
+      className={`fixed inset-0 z-[200] ${isAnimatingOut ? 'mobile-backdrop-exit' : 'mobile-backdrop-enter'}`}
+      onClick={handleClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+
+      {/* Panel */}
+      <div
+        className={`absolute right-0 top-0 h-full w-full max-w-sm bg-white dark:bg-slate-900 shadow-2xl flex flex-col ${isAnimatingOut ? 'mobile-menu-exit' : 'mobile-menu-enter'}`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/20 via-transparent to-transparent" />
+
+          <div className="relative p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                  <Cloud className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white tracking-tight">GDP Cloud</h2>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">
+                      {isOnline ? 'Conectado' : 'Sin conexión'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleClose}
+                className="p-2.5 hover:bg-white/10 rounded-xl transition-all active:scale-90"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+
+            {/* User info */}
+            <div className="mt-4 p-3 bg-white/5 rounded-xl border border-white/10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                    <span className="text-white text-xs font-black">
+                      {userEmail?.charAt(0).toUpperCase() || '?'}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white truncate max-w-[160px]">{userEmail}</p>
+                    <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
+                      {roleLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {sections.map((section, sectionIdx) => (
+            <div key={section.id} className="menu-item-enter" style={{ animationDelay: `${sectionIdx * 50}ms` }}>
+              {/* Section header */}
+              <button
+                onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
+                className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg bg-gradient-to-r ${section.gradient} text-white`}>
+                    {section.icon}
+                  </div>
+                  <span className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                    {section.label}
+                  </span>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSection === section.id ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Section items */}
+              {expandedSection === section.id && (
+                <div className="mt-1 ml-4 space-y-1">
+                  {section.items.map((item, itemIdx) => (
+                    <button
+                      key={itemIdx}
+                      onClick={() => !item.disabled && handleAction(item.action)}
+                      disabled={item.disabled}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        item.disabled
+                          ? 'opacity-40 cursor-not-allowed'
+                          : item.active
+                            ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200 dark:ring-indigo-800'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.98]'
+                      }`}
+                    >
+                      <span className={item.color}>{item.icon}</span>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.label}</span>
+                      {item.active && (
+                        <span className="ml-auto w-2 h-2 rounded-full bg-indigo-500" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Admin Panel - Solo para admins */}
+          {isAdmin && (
+            <div className="menu-item-enter" style={{ animationDelay: '200ms' }}>
+              <button
+                onClick={() => handleAction(onOpenAdminPanel)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all active:scale-[0.98]"
+              >
+                <div className="p-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+                  <Settings className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-black text-purple-700 dark:text-purple-300 uppercase tracking-wider">
+                  Panel Admin
+                </span>
+                <ChevronRight className="w-5 h-5 text-purple-400 ml-auto" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+          <button
+            onClick={() => handleAction(onSignOut)}
+            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-all active:scale-[0.98]"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="font-black text-sm uppercase tracking-wider">Cerrar Sesión</span>
+          </button>
+
+          <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 text-center uppercase tracking-widest">
+            GDP Cloud Engine 2026
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AppContent: React.FC = () => {
   const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
@@ -82,6 +371,7 @@ const AppContent: React.FC = () => {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [requestedSolicitudType, setRequestedSolicitudType] = useState<SolicitudType | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Hook centralizado para modales
   const { modals, openModal, closeModal } = useModals();
@@ -343,213 +633,131 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <header className="sticky top-0 z-[100] w-full border-b border-slate-200 dark:border-slate-700 bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl">
+      {/* ═══════════════════════════════════════════════════════════════════════════
+          HEADER MEJORADO - Diseño responsive con menú hamburguesa en móvil
+          ═══════════════════════════════════════════════════════════════════════════ */}
+      <header className="sticky top-0 z-[100] w-full border-b border-slate-200/80 dark:border-slate-700/80 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Logo y título */}
+
+          {/* ═══ LOGO Y TÍTULO ═══ */}
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-500 ${isSyncing ? 'bg-indigo-600 animate-pulse' : 'bg-slate-900 dark:bg-indigo-600'}`}>
-              <Cloud className="text-white w-4 h-4" />
+            {/* Logo Premium con gradiente */}
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${
+                isSyncing ? 'logo-syncing' : 'shadow-indigo-200 dark:shadow-indigo-900/50'
+              }`}
+            >
+              <Cloud className="text-white w-5 h-5" />
             </div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
-                GDP Cloud
-              </h1>
-              <span className={`w-1.5 h-1.5 rounded-full ${syncStatusDotClass}`} />
-            </div>
+
+            {/* Título */}
+            <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+              GDP Cloud
+            </h1>
           </div>
 
-          {/* ═══════════════════════════════════════════════════════════════════
-               BARRA DE ACCIONES - Organizada en grupos lógicos
-              ═══════════════════════════════════════════════════════════════════ */}
-          <div className="flex items-center gap-1 sm:gap-1.5">
+          {/* ═══ ACCIONES ═══ */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                GRUPO 1: DATOS (Sync, Undo) - Acciones de datos principales
-               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg px-1 py-0.5">
-              {/* Sync */}
+            {/* ─── GRUPO: SYNC (visible en tablet+) ─── */}
+            <div className="hidden sm:flex items-center gap-0.5">
               <button
                 onClick={() => fetchFromCloud()}
                 disabled={isSyncing}
-                className={`p-2 rounded-lg transition-all ${isSyncing
-                  ? 'text-slate-300 dark:text-slate-600'
-                  : syncError
-                    ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30'
-                    : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                  }`}
-                title="Sincronizar datos"
+                className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 ${
+                  isSyncing
+                    ? 'text-slate-300 dark:text-slate-600'
+                    : syncError
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+                title={typeof syncError === 'string' ? syncError : 'Sincronizar datos'}
               >
-                {syncError ? <AlertCircle className="w-4 h-4" /> : <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />}
+                {syncError ? <AlertCircle className="w-5 h-5" /> : <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />}
               </button>
 
-              {/* Undo - Solo aparece cuando hay algo para deshacer */}
               {canUndo && (
                 <button
                   onClick={handleUndo}
-                  className="p-2 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all active:scale-95"
+                  className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                   title="Deshacer última acción"
                 >
-                  <Undo2 className="w-4 h-4" />
+                  <Undo2 className="w-5 h-5" />
                 </button>
               )}
             </div>
 
-            {/* Separador */}
-            <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
-
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                GRUPO 2: VISTAS (Dashboard, Libro, Calendario, Personal)
-               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="hidden sm:flex items-center gap-1">
-              {/* Dashboard */}
+            {/* ─── GRUPO: VISTAS (visible en lg+) ─── */}
+            <div className="hidden lg:flex items-center gap-0.5">
               <button
                 onClick={() => setShowDashboard(p => !p)}
-                className={`p-2 rounded-lg transition-all ${showDashboard
-                  ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                title="Panel de estadísticas"
+                className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 ${
+                  showDashboard
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+                title="Dashboard de estadísticas"
               >
-                <BarChart3 className="w-4 h-4" />
+                <BarChart3 className="w-5 h-5" />
               </button>
 
-              {/* Libro de decretos */}
               <button
                 onClick={() => openModal('decreeBook')}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                 title="Libro de decretos"
               >
-                <BookOpen className="w-4 h-4" />
+                <BookOpen className="w-5 h-5" />
               </button>
 
-              {/* Calendario */}
               <button
                 onClick={() => openModal('calendar')}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                 title="Calendario de ausencias"
               >
-                <CalendarDays className="w-4 h-4" />
+                <CalendarDays className="w-5 h-5" />
               </button>
 
-              {/* Personal */}
               <button
                 onClick={() => openModal('employeeList')}
-                className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all uppercase tracking-wider"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
+                title="Gestión de personal"
               >
-                <Users className="w-3.5 h-3.5" />
-                {employees.length}
+                <Users className="w-5 h-5" />
+                <span className="text-[10px] font-black">{employees.length}</span>
               </button>
             </div>
 
-            {/* Separador */}
-            <div className="hidden md:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
-
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                GRUPO 3: EXPORTACIÓN (Excel, Sheets, Imprimir)
-               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="hidden md:flex items-center gap-1 bg-emerald-50/50 dark:bg-emerald-900/20 rounded-lg px-1 py-0.5">
-              {/* Excel */}
+            {/* ─── GRUPO: EXPORTAR (visible en xl+) ─── */}
+            <div className="hidden xl:flex items-center gap-0.5">
               <button
                 onClick={handleExportData}
-                className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all active:scale-95"
+                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                 title="Exportar a Excel"
               >
-                <FileSpreadsheet className="w-4 h-4" />
+                <FileSpreadsheet className="w-5 h-5" />
               </button>
 
-              {/* Menú desplegable de hojas de cálculo */}
-              <div className="relative group">
-                <button
-                  className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all flex items-center gap-1"
-                  title="Abrir hojas de Google"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </button>
-
-                {/* Dropdown */}
-                <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 overflow-hidden">
-                  <div className="p-2 border-b border-slate-100 dark:border-slate-700">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-2">Hojas de Cálculo</p>
-                  </div>
-
-                  {/* Permisos Administrativos */}
-                  <button
-                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.DECRETOS_SHEET_ID}`, '_blank')}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors text-left"
-                  >
-                    <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg flex items-center justify-center">
-                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">PA</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Permisos Administrativos</p>
-                      <p className="text-[10px] text-slate-400">Decretos de permisos</p>
-                    </div>
-                  </button>
-
-                  {/* Feriado Legal 1 Período */}
-                  <button
-                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.FERIADOS_SHEET_ID}`, '_blank')}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors text-left"
-                  >
-                    <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg flex items-center justify-center">
-                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">FL</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Feriado Legal 1P</p>
-                      <p className="text-[10px] text-slate-400">Un período</p>
-                    </div>
-                  </button>
-
-                  {/* Feriado Legal 2 Períodos */}
-                  <button
-                    onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.FERIADOS_2P_SHEET_ID}`, '_blank')}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors text-left"
-                  >
-                    <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/50 rounded-lg flex items-center justify-center">
-                      <span className="text-xs font-black text-amber-600 dark:text-amber-400">2P</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Feriado Legal 2P</p>
-                      <p className="text-[10px] text-slate-400">Dos períodos</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Imprimir */}
               <button
                 onClick={() => window.print()}
-                className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all"
+                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                 title="Imprimir página"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-5 h-5" />
               </button>
             </div>
 
             {/* Separador */}
-            <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+            <div className="hidden sm:block w-px h-8 bg-slate-200 dark:bg-slate-700" />
 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                GRUPO 4: PREFERENCIAS (Tema, Dark Mode, Notificaciones)
-               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+            {/* ─── GRUPO: PREFERENCIAS ─── */}
             <div className="flex items-center gap-1">
-              {/* Dark Mode */}
+              {/* Dark Mode - visible en sm+ */}
               <button
                 onClick={toggleDarkMode}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                className="hidden sm:flex p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                 title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               >
-                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
-
-              {/* Tema - Solo desktop */}
-              <button
-                onClick={() => openModal('themeSelector')}
-                className="hidden sm:flex p-2 rounded-lg text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-                title="Personalizar tema"
-              >
-                <Palette className="w-4 h-4" />
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
               {/* Notificaciones */}
@@ -560,51 +768,98 @@ const AppContent: React.FC = () => {
               />
             </div>
 
-            {/* Separador principal antes de sesión */}
-            <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-2" />
+            {/* Separador antes de sesión */}
+            <div className="hidden md:block w-px h-8 bg-slate-200 dark:bg-slate-700" />
 
-            {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                GRUPO 5: SESIÓN (Usuario, Rol, Admin, Logout)
-               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-            <div className="flex items-center gap-2">
-              {/* Badge del rol */}
-              <span className={`hidden sm:inline-flex px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
-                {roleLabel}
-              </span>
-              <span className="hidden lg:block text-[10px] font-bold text-slate-400 dark:text-slate-500 truncate max-w-[100px]">
-                {user?.email}
-              </span>
+            {/* ─── GRUPO: SESIÓN (visible en md+) ─── */}
+            <div className="hidden md:flex items-center gap-2">
+              {/* Badge del rol - Premium style */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  role === 'admin' ? 'bg-purple-500' : role === 'editor' ? 'bg-amber-500' : 'bg-sky-500'
+                }`} />
+                <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 tracking-wide">
+                  {roleLabel}
+                </span>
+                <span className="hidden lg:block text-[10px] text-slate-400 dark:text-slate-500">
+                  {user?.email?.split('@')[0]}
+                </span>
+              </div>
 
               {/* Admin Panel - Solo para admins */}
               {role === 'admin' && (
                 <button
                   onClick={() => setShowAdminPanel(true)}
-                  className="p-2 rounded-lg text-purple-500 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all"
+                  className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                   title="Panel de Administración"
                 >
-                  <Settings className="w-4 h-4" />
+                  <Settings className="w-5 h-5" />
                 </button>
               )}
 
               {/* Logout */}
               <button
                 onClick={() => signOut()}
-                className="p-2 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                 title="Cerrar sesión"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-5 h-5" />
               </button>
             </div>
+
+            {/* ─── MENÚ HAMBURGUESA (visible en móvil/tablet) ─── */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
+              title="Menú"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Progress bar de sincronización */}
         {isSyncing && (
-          <div className="absolute bottom-0 left-0 w-full h-[3px] bg-indigo-50 dark:bg-indigo-900/50 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-indigo-600 via-sky-400 to-indigo-600 bg-[length:200%_100%] animate-sync-progress" />
+          <div className="absolute bottom-0 left-0 w-full h-[3px] bg-indigo-100 dark:bg-indigo-900/50 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-indigo-600 via-purple-500 to-indigo-600 bg-[length:200%_100%] animate-sync-progress" />
           </div>
         )}
       </header>
+
+      {/* Mobile Menu */}
+      <MobileMenu
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        onSync={() => fetchFromCloud()}
+        onUndo={handleUndo}
+        canUndo={canUndo}
+        onToggleDashboard={() => setShowDashboard(p => !p)}
+        showDashboard={showDashboard}
+        onOpenDecreeBook={() => openModal('decreeBook')}
+        onOpenCalendar={() => openModal('calendar')}
+        onOpenEmployeeList={() => openModal('employeeList')}
+        onExportExcel={handleExportData}
+        onOpenSheetPA={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.DECRETOS_SHEET_ID}`, '_blank')}
+        onOpenSheetFL={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.FERIADOS_SHEET_ID}`, '_blank')}
+        onOpenSheet2P={() => window.open(`https://docs.google.com/spreadsheets/d/${CONFIG.FERIADOS_2P_SHEET_ID}`, '_blank')}
+        onPrint={() => window.print()}
+        onToggleDarkMode={toggleDarkMode}
+        isDark={isDark}
+        onOpenThemeSelector={() => openModal('themeSelector')}
+        onOpenShortcuts={() => openModal('shortcuts')}
+        onOpenAdminPanel={() => setShowAdminPanel(true)}
+        onSignOut={() => signOut()}
+        isSyncing={isSyncing}
+        syncError={syncError}
+        isOnline={isOnline}
+        employeesCount={employees.length}
+        userEmail={user?.email}
+        role={role}
+        roleLabel={roleLabel}
+        roleColors={roleColors}
+        canExportExcel={permissions.canExportExcel}
+        isAdmin={role === 'admin'}
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8 sm:space-y-10 page-fade-in">
@@ -617,6 +872,10 @@ const AppContent: React.FC = () => {
           onClickDecrees={handleViewDecreesFromWelcome}
           onClickEmployees={handleViewEmployeesFromWelcome}
           onClickUrgent={handleViewUrgentFromWelcome}
+          isSyncing={isSyncing}
+          isOnline={isOnline}
+          lastSync={lastSync}
+          syncStatusDotClass={syncStatusDotClass}
         />
 
         <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
@@ -631,7 +890,6 @@ const AppContent: React.FC = () => {
             <Dashboard
               records={records}
               employees={employees}
-              onViewLowBalance={() => openModal('lowBalance')}
             />
           </Suspense>
         )}

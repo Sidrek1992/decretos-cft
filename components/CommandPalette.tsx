@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { PermitRecord, Employee } from '../types';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
+import { normalizeSearchText } from '../utils/search';
 
 // Tipos de comandos disponibles
 interface CommandItem {
@@ -142,7 +143,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             icon: <User className="w-4 h-4" />,
             title: emp.nombre,
             subtitle: `RUT: ${emp.rut}`,
-            keywords: [emp.nombre.toLowerCase(), emp.rut.toLowerCase()],
+            keywords: [normalizeSearchText(emp.nombre), normalizeSearchText(emp.rut)],
             action: () => { onSelectEmployee(emp); onClose(); },
         })),
         [employees, onSelectEmployee, onClose]
@@ -161,10 +162,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                 title: `${r.solicitudType} N° ${r.acto}`,
                 subtitle: `${r.funcionario} — ${r.cantidadDias} días`,
                 keywords: [
-                    r.funcionario.toLowerCase(),
-                    r.acto.toLowerCase(),
-                    r.solicitudType.toLowerCase(),
-                    r.rut.toLowerCase(),
+                    normalizeSearchText(r.funcionario),
+                    normalizeSearchText(r.acto),
+                    normalizeSearchText(r.solicitudType),
+                    normalizeSearchText(r.rut),
                 ],
                 action: () => { onSelectRecord(r); onClose(); },
             })),
@@ -173,9 +174,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     // Filtrar resultados basados en la búsqueda
     const filteredResults = useMemo(() => {
-        const searchTerms = query.toLowerCase().trim().split(/\s+/);
+        const normalizedQuery = normalizeSearchText(query);
+        const searchTerms = normalizedQuery.split(/\s+/).filter(Boolean);
 
-        if (!query.trim()) {
+        if (!normalizedQuery) {
             // Sin búsqueda, mostrar acciones principales
             return actionCommands;
         }
@@ -185,9 +187,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         return allItems
             .filter(item => {
                 const searchableText = [
-                    item.title.toLowerCase(),
-                    item.subtitle?.toLowerCase() || '',
-                    ...(item.keywords || []),
+                    normalizeSearchText(item.title),
+                    normalizeSearchText(item.subtitle || ''),
+                    ...(item.keywords || []).map(normalizeSearchText),
                 ].join(' ');
 
                 return searchTerms.every(term => searchableText.includes(term));
