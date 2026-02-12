@@ -1212,7 +1212,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Top Funcionarios con saldo y barra de progreso */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 sm:p-6 border border-slate-200 dark:border-slate-700">
                     {/* Header + filtros */}
                     <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
                         <div className="flex items-center gap-3">
@@ -1247,19 +1247,20 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
 
                     {/* Header de la tabla mini */}
                     {topFilter === 'todos' ? (
-                        <div className="grid grid-cols-[24px_1fr_60px_60px_60px] gap-x-3 items-center px-1 mb-2">
+                        <div className="grid grid-cols-[20px_minmax(0,1fr)_34px_34px_50px_50px] sm:grid-cols-[24px_minmax(0,1fr)_46px_46px_62px_62px] gap-x-1.5 sm:gap-x-3 items-center px-0.5 sm:px-1 mb-2">
                             <span />
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nombre</span>
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">PA</span>
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">FL</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Saldo</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Saldo PA</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Saldo FL</span>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-[24px_1fr_80px_80px] gap-x-3 items-center px-1 mb-2">
+                        <div className="grid grid-cols-[20px_minmax(0,1fr)_56px_64px] sm:grid-cols-[24px_minmax(0,1fr)_72px_84px] gap-x-1.5 sm:gap-x-3 items-center px-0.5 sm:px-1 mb-2">
                             <span />
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nombre</span>
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Días</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Saldo</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{topFilter === 'PA' ? 'Saldo FL' : 'Saldo PA'}</span>
                         </div>
                     )}
 
@@ -1272,36 +1273,49 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                                 ? { background: barColor }
                                 : { backgroundColor: barColor };
 
-                            const saldoPA = emp.saldoPA !== null ? emp.saldoPA.toFixed(1) : '—';
-                            const saldoFL = emp.saldoFL !== null ? emp.saldoFL.toFixed(1) : '—';
-                            const saldoLabel = topFilter === 'PA' ? saldoPA
-                                : topFilter === 'FL' ? saldoFL
-                                    : (emp.saldoPA !== null && emp.saldoFL !== null ? `${saldoPA} / ${saldoFL}` : emp.saldoPA !== null ? saldoPA : saldoFL);
-                            const saldoNum = topFilter === 'PA' ? emp.saldoPA : topFilter === 'FL' ? emp.saldoFL : Math.min(emp.saldoPA ?? 999, emp.saldoFL ?? 999);
-                            const saldoColor = saldoNum !== null && saldoNum < 2 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+                            const saldoPAValue = emp.saldoPA;
+                            const saldoFLValue = emp.saldoFL;
+                            const saldoPA = saldoPAValue !== null ? saldoPAValue.toFixed(1) : '—';
+                            const saldoFL = saldoFLValue !== null ? saldoFLValue.toFixed(1) : '—';
+
+                            const saldoPAColor = saldoPAValue === null
+                                ? 'text-slate-400 dark:text-slate-500'
+                                : saldoPAValue < 2
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-emerald-600 dark:text-emerald-400';
+
+                            const saldoFLColor = saldoFLValue === null
+                                ? 'text-slate-400 dark:text-slate-500'
+                                : saldoFLValue < 2
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-emerald-600 dark:text-emerald-400';
+
+                            const saldoCrossLabel = topFilter === 'PA' ? saldoFL : saldoPA;
+                            const saldoCrossColor = topFilter === 'PA' ? saldoFLColor : saldoPAColor;
 
                             const rankColors = ['bg-amber-500', 'bg-slate-400', 'bg-amber-700', 'bg-slate-300', 'bg-slate-300', 'bg-slate-300'];
 
                             return (
                                 <div key={emp.rut} className="group">
                                     {topFilter === 'todos' ? (
-                                        <div className="grid grid-cols-[24px_1fr_60px_60px_60px] gap-x-3 items-center px-1">
-                                            <div className={`w-6 h-6 ${rankColors[i]} rounded-md flex items-center justify-center text-white text-[9px] font-black`}>
+                                        <div className="grid grid-cols-[20px_minmax(0,1fr)_34px_34px_50px_50px] sm:grid-cols-[24px_minmax(0,1fr)_46px_46px_62px_62px] gap-x-1.5 sm:gap-x-3 items-center px-0.5 sm:px-1">
+                                            <div className={`w-5 h-5 sm:w-6 sm:h-6 ${rankColors[i]} rounded-md flex items-center justify-center text-white text-[9px] font-black`}>
                                                 {i + 1}
                                             </div>
-                                            <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{emp.nombre}</p>
-                                            <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 text-center">{emp.diasPA}</p>
-                                            <p className="text-sm font-black text-amber-600 dark:text-amber-400 text-center">{emp.diasFLTop}</p>
-                                            <p className={`text-sm font-black text-center ${saldoColor}`}>{saldoLabel}</p>
+                                            <p className="text-[11px] sm:text-sm font-bold text-slate-800 dark:text-white truncate min-w-0">{emp.nombre}</p>
+                                            <p className="text-[11px] sm:text-sm font-black text-indigo-600 dark:text-indigo-400 text-center">{emp.diasPA}</p>
+                                            <p className="text-[11px] sm:text-sm font-black text-amber-600 dark:text-amber-400 text-center">{emp.diasFLTop}</p>
+                                            <p className={`text-[11px] sm:text-sm font-black text-center ${saldoPAColor}`}>{saldoPA}</p>
+                                            <p className={`text-[11px] sm:text-sm font-black text-center ${saldoFLColor}`}>{saldoFL}</p>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-[24px_1fr_80px_80px] gap-x-3 items-center px-1">
-                                            <div className={`w-6 h-6 ${rankColors[i]} rounded-md flex items-center justify-center text-white text-[9px] font-black`}>
+                                        <div className="grid grid-cols-[20px_minmax(0,1fr)_56px_64px] sm:grid-cols-[24px_minmax(0,1fr)_72px_84px] gap-x-1.5 sm:gap-x-3 items-center px-0.5 sm:px-1">
+                                            <div className={`w-5 h-5 sm:w-6 sm:h-6 ${rankColors[i]} rounded-md flex items-center justify-center text-white text-[9px] font-black`}>
                                                 {i + 1}
                                             </div>
-                                            <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{emp.nombre}</p>
-                                            <p className={`text-sm font-black text-center ${topFilter === 'PA' ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>{diasMostrar}</p>
-                                            <p className={`text-sm font-black text-center ${saldoColor}`}>{saldoLabel}</p>
+                                            <p className="text-[11px] sm:text-sm font-bold text-slate-800 dark:text-white truncate min-w-0">{emp.nombre}</p>
+                                            <p className={`text-[11px] sm:text-sm font-black text-center ${topFilter === 'PA' ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>{diasMostrar}</p>
+                                            <p className={`text-[11px] sm:text-sm font-black text-center ${saldoCrossColor}`}>{saldoCrossLabel}</p>
                                         </div>
                                     )}
                                     <div className="mt-1.5 ml-7 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -1319,7 +1333,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                     </div>
 
                     <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-4 px-1">
-                        Saldo: {topFilter === 'todos' ? 'PA / FL' : topFilter}. Valor amarillo = menos de 2 días disponibles.
+                        Saldo: {topFilter === 'todos' ? 'PA y FL por separado' : topFilter === 'PA' ? 'en Solo PA se muestra saldo FL' : 'en Solo FL se muestra saldo PA'}. Valor amarillo = menos de 2 días disponibles.
                     </p>
                 </div>
 
