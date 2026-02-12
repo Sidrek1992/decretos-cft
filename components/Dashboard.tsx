@@ -1218,7 +1218,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                         <div className="flex items-center gap-3">
                             <Users className="w-5 h-5 text-indigo-500" />
                             <h3 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                                Top funcionarios — {periodLabel}
+                                Resumen de funcionarios — {periodLabel}
                             </h3>
                         </div>
                         {/* Filtro PA / FL / Todos */}
@@ -1260,7 +1260,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                             <span />
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nombre</span>
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Días</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{topFilter === 'PA' ? 'Saldo FL' : 'Saldo PA'}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{topFilter === 'PA' ? 'Saldo PA' : 'Saldo FL'}</span>
                         </div>
                     )}
 
@@ -1290,8 +1290,8 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                                     ? 'text-amber-600 dark:text-amber-400'
                                     : 'text-emerald-600 dark:text-emerald-400';
 
-                            const saldoCrossLabel = topFilter === 'PA' ? saldoFL : saldoPA;
-                            const saldoCrossColor = topFilter === 'PA' ? saldoFLColor : saldoPAColor;
+                            const saldoCrossLabel = topFilter === 'PA' ? saldoPA : saldoFL;
+                            const saldoCrossColor = topFilter === 'PA' ? saldoPAColor : saldoFLColor;
 
                             const rankColors = ['bg-amber-500', 'bg-slate-400', 'bg-amber-700', 'bg-slate-300', 'bg-slate-300', 'bg-slate-300'];
 
@@ -1333,7 +1333,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                     </div>
 
                     <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-4 px-1">
-                        Saldo: {topFilter === 'todos' ? 'PA y FL por separado' : topFilter === 'PA' ? 'en Solo PA se muestra saldo FL' : 'en Solo FL se muestra saldo PA'}. Valor amarillo = menos de 2 días disponibles.
+                        Saldo: {topFilter === 'todos' ? 'PA y FL por separado' : topFilter === 'PA' ? 'en Solo PA se muestra saldo PA' : 'en Solo FL se muestra saldo FL'}. Valor amarillo = menos de 2 días disponibles.
                     </p>
                 </div>
 
