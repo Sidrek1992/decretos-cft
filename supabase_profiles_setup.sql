@@ -34,18 +34,26 @@ to authenticated
 using (auth.jwt() ->> 'email' = email)
 with check (auth.jwt() ->> 'email' = email);
 
--- IMPORTANTE:
--- Para que un admin pueda cambiar rol de otros usuarios desde el frontend,
--- debes crear una policy adicional restringida por lista de admins.
--- Ejemplo rapido (ajusta correos):
---
--- drop policy if exists "Admins can manage all profiles" on public.profiles;
--- create policy "Admins can manage all profiles"
--- on public.profiles
--- for all
--- to authenticated
--- using ((auth.jwt() ->> 'email') in ('mguzmanahumada@gmail.com'))
--- with check ((auth.jwt() ->> 'email') in ('mguzmanahumada@gmail.com'));
+-- Admins autorizados pueden gestionar todos los perfiles
+drop policy if exists "Admins can manage all profiles" on public.profiles;
+create policy "Admins can manage all profiles"
+on public.profiles
+for all
+to authenticated
+using (lower(auth.jwt() ->> 'email') in (
+  'mguzmanahumada@gmail.com',
+  'a.gestiondepersonas@cftestatalaricayparinacota.cl',
+  'gestiondepersonas@cftestatalaricayparinacota.cl',
+  'analista.gp@cftestatalaricayparinacota.cl',
+  'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
+))
+with check (lower(auth.jwt() ->> 'email') in (
+  'mguzmanahumada@gmail.com',
+  'a.gestiondepersonas@cftestatalaricayparinacota.cl',
+  'gestiondepersonas@cftestatalaricayparinacota.cl',
+  'analista.gp@cftestatalaricayparinacota.cl',
+  'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
+));
 
 create or replace function public.set_profiles_updated_at()
 returns trigger
@@ -63,10 +71,13 @@ before update on public.profiles
 for each row
 execute function public.set_profiles_updated_at();
 
--- Usuarios administradores obligatorios
+-- Usuarios administradores iniciales
 insert into public.profiles (email, role, first_name, last_name)
 values
   ('a.gestiondepersonas@cftestatalaricayparinacota.cl', 'admin', '', ''),
-  ('mguzmanahumada@gmail.com', 'admin', '', '')
+  ('mguzmanahumada@gmail.com', 'admin', '', ''),
+  ('gestiondepersonas@cftestatalaricayparinacota.cl', 'admin', '', ''),
+  ('analista.gp@cftestatalaricayparinacota.cl', 'admin', '', ''),
+  ('asis.gestiondepersonas@cftestatalaricayparinacota.cl', 'admin', '', '')
 on conflict (email)
 do update set role = excluded.role, updated_at = now();

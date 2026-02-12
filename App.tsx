@@ -348,7 +348,7 @@ const AppContent: React.FC = () => {
   const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
 
   // ★ Autenticación y Permisos
-  const { user, signOut, permissions, role, roleLabel, roleColors } = useAuth();
+  const { user, profile, signOut, permissions, role, roleLabel, roleColors } = useAuth();
 
   // Employees sincronizados con Google Sheets
   const {
@@ -605,6 +605,11 @@ const AppContent: React.FC = () => {
           : 'bg-red-500';
 
   const welcomeUserName = useMemo(() => {
+    const firstFromProfile = String(profile?.firstName || '').trim();
+    const lastFromProfile = String(profile?.lastName || '').trim();
+    const fullFromProfile = `${firstFromProfile} ${lastFromProfile}`.trim();
+    if (fullFromProfile) return fullFromProfile;
+
     const metadata = user?.user_metadata as Record<string, unknown> | undefined;
     const firstFromMetadata = String(metadata?.first_name || '').trim();
     const lastFromMetadata = String(metadata?.last_name || '').trim();
@@ -618,9 +623,9 @@ const AppContent: React.FC = () => {
       const raw = localStorage.getItem(USER_PROFILES_STORAGE_KEY);
       if (raw) {
         const profiles = JSON.parse(raw) as Record<string, { firstName?: string; lastName?: string }>;
-        const profile = profiles[email];
-        const firstName = String(profile?.firstName || '').trim();
-        const lastName = String(profile?.lastName || '').trim();
+        const localProfile = profiles[email];
+        const firstName = String(localProfile?.firstName || '').trim();
+        const lastName = String(localProfile?.lastName || '').trim();
         const fullName = `${firstName} ${lastName}`.trim();
         if (fullName) return fullName;
       }
@@ -629,7 +634,7 @@ const AppContent: React.FC = () => {
     }
 
     return user?.email;
-  }, [user]);
+  }, [profile, user]);
 
   return (
     <div className="min-h-screen">

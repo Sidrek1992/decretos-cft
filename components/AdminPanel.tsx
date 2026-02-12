@@ -154,9 +154,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 const sec = security[email] || { blocked: false, forcePasswordChange: false, lastAccessAt: null };
                 return {
                     email,
-                    role: remoteProfile?.role || roles[email] || 'reader',
-                    firstName: remoteProfile?.firstName || localProfile.firstName,
-                    lastName: remoteProfile?.lastName || localProfile.lastName,
+                    role: remoteProfile ? remoteProfile.role : (roles[email] || 'reader'),
+                    firstName: remoteProfile ? remoteProfile.firstName : localProfile.firstName,
+                    lastName: remoteProfile ? remoteProfile.lastName : localProfile.lastName,
                     password: passwords[email] || '',
                     blocked: Boolean(sec.blocked),
                     forcePasswordChange: Boolean(sec.forcePasswordChange),
@@ -349,7 +349,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         }));
     };
 
-    const handleSaveProfile = (email: string) => {
+    const handleSaveProfile = async (email: string) => {
         const draft = profileDrafts[email] || { firstName: '', lastName: '' };
         const firstName = draft.firstName.trim();
         const lastName = draft.lastName.trim();
@@ -359,22 +359,35 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             return;
         }
 
-        const profiles = loadUserProfiles();
-        profiles[email.toLowerCase()] = { firstName, lastName };
-        saveUserProfiles(profiles);
+        const normalizedEmail = email.toLowerCase();
+        const userRole = (users.find((u) => u.email === normalizedEmail)?.role || 'reader') as UserRole;
 
-        const userRole = (users.find((u) => u.email === email.toLowerCase())?.role || 'reader') as UserRole;
-        void upsertRemoteProfile({ email, role: userRole, firstName, lastName }).catch(() => undefined);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            await upsertRemoteProfile({ email: normalizedEmail, role: userRole, firstName, lastName });
+        } catch (err: any) {
+            const detail = String(err?.message || '').trim();
+            setError(detail
+                ? `No se pudo guardar el nombre en la nube: ${detail}`
+                : 'No se pudo guardar el nombre en la nube. Verifica permisos de Supabase para administradores.');
+            return;
+        }
+
+        const profiles = loadUserProfiles();
+        profiles[normalizedEmail] = { firstName, lastName };
+        saveUserProfiles(profiles);
 
         appendAuditLog({
             scope: 'admin',
             action: 'update_profile',
             actor: 'admin',
-            target: email,
+            target: normalizedEmail,
             details: `Nombre actualizado a ${firstName} ${lastName}`
         });
         void loadUsers();
-        setSuccess(`Datos actualizados para ${email}`);
+        setSuccess(`Datos actualizados para ${normalizedEmail}`);
     };
 
     const handleResetPassword = async (email: string) => {
@@ -733,7 +746,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                             className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
                                         />
                                         <button
-                                            onClick={() => handleSaveProfile(user.email)}
+                                            onClick={() => { void handleSaveProfile(user.email); }}
                                             className="px-3 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"
                                         >
                                             <Save size={13} />

@@ -9,6 +9,8 @@ interface UserProfile {
     id: string;
     email: string;
     role: UserRole;
+    firstName: string;
+    lastName: string;
     created_at: string;
 }
 
@@ -101,7 +103,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // timeout de 5 segundos para la carga del perfil remoto
             const profilePromise = supabase
                 .from('profiles')
-                .select('email, role, created_at')
+                .select('email, role, first_name, last_name, created_at')
                 .eq('email', normalizedEmail)
                 .maybeSingle();
 
@@ -120,6 +122,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     id: userId,
                     email: data.email,
                     role: normalizedRole,
+                    firstName: String(data.first_name || '').trim(),
+                    lastName: String(data.last_name || '').trim(),
                     created_at: String(data.created_at || new Date().toISOString())
                 });
                 console.log('Auth: Perfil cargado exitosamente desde DB');
