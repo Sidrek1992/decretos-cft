@@ -334,12 +334,13 @@ const PermitForm: React.FC<PermitFormProps> = ({
 
   const normalizedEmployeeQuery = normalizeSearchText(formData.funcionario);
   const normalizedEmployeeRutQuery = normalizeRutForSearch(formData.funcionario);
+  const hasEmployeeSearchTerm = normalizedEmployeeQuery.length > 0;
+  const hasEmployeeRutSearchTerm = normalizedEmployeeRutQuery.length > 0;
 
   const filteredEmployees = employees.filter(e => {
-    return (
-      normalizeSearchText(e.nombre).includes(normalizedEmployeeQuery) ||
-      normalizeRutForSearch(e.rut).includes(normalizedEmployeeRutQuery)
-    );
+    const matchesEmployee = normalizeSearchText(e.nombre).includes(normalizedEmployeeQuery);
+    const matchesRut = hasEmployeeRutSearchTerm && normalizeRutForSearch(e.rut).includes(normalizedEmployeeRutQuery);
+    return !hasEmployeeSearchTerm || matchesEmployee || matchesRut;
   });
 
   const saldoFinal = (formData.diasHaber - formData.cantidadDias).toFixed(1);
@@ -539,7 +540,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
-                {editingRecord ? 'Editando Resolución' : 'Generar Acto Administrativo'}
+                {editingRecord ? 'Editando Resolución' : 'Generar Decreto Administrativo'}
               </h2>
               <p className="text-[10px] sm:text-[11px] font-bold uppercase opacity-80 tracking-[0.15em] sm:tracking-[0.2em] mt-1">
                 {isProcessing ? 'Analizando con Gemini 3 Flash...' : formData.solicitudType === 'PA' ? 'Permiso Administrativo' : 'Feriado Legal'}

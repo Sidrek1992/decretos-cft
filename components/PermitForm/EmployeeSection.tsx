@@ -49,12 +49,13 @@ export const EmployeeSection: React.FC<EmployeeSectionProps> = ({
 
   const normalizedQuery = normalizeSearchText(funcionario);
   const normalizedRutQuery = normalizeRutForSearch(funcionario);
+  const hasSearchTerm = normalizedQuery.length > 0;
+  const hasRutSearchTerm = normalizedRutQuery.length > 0;
 
   const filteredEmployees = employees.filter(e => {
-    return (
-      normalizeSearchText(e.nombre).includes(normalizedQuery) ||
-      normalizeRutForSearch(e.rut).includes(normalizedRutQuery)
-    );
+    const matchesEmployee = normalizeSearchText(e.nombre).includes(normalizedQuery);
+    const matchesRut = hasRutSearchTerm && normalizeRutForSearch(e.rut).includes(normalizedRutQuery);
+    return !hasSearchTerm || matchesEmployee || matchesRut;
   });
 
   const handleSelectEmployee = (emp: Employee) => {

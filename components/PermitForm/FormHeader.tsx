@@ -43,7 +43,7 @@ export const FormHeader: React.FC<FormHeaderProps> = ({
         </div>
         <div>
           <h2 className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
-            {isEditing ? 'Editando Resolución' : 'Generar Acto Administrativo'}
+            {isEditing ? 'Editando Resolución' : 'Generar Decreto Administrativo'}
           </h2>
           <p className="text-[10px] sm:text-[11px] font-bold uppercase opacity-80 tracking-[0.15em] sm:tracking-[0.2em] mt-1">
             {isProcessing 
