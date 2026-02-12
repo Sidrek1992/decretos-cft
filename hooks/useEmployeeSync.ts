@@ -4,6 +4,7 @@ import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
 import { localBackup } from '../services/localBackup';
 import { publishSyncEvent, subscribeToSyncEvents } from '../services/realtimeSync';
+import { formatRutForStorage, isValidRutModulo11, normalizeRutCanonical } from '../utils/rutIntegrity';
 
 const employeeLogger = logger.create('EmployeeSync');
 
@@ -19,6 +20,31 @@ interface UseEmployeeSyncReturn {
     updateEmployee: (oldRut: string, updatedEmployee: Employee) => void;
     deleteEmployee: (rut: string) => void;
 }
+
+const normalizeEmployeePayload = (employee: Employee): Employee | null => {
+    const nombre = String(employee.nombre || '').trim().toUpperCase();
+    const rut = formatRutForStorage(employee.rut);
+
+    if (!nombre || !rut || !isValidRutModulo11(rut)) {
+        return null;
+    }
+
+    return { nombre, rut };
+};
+
+const dedupeEmployeesByRut = (employees: Employee[]): Employee[] => {
+    const map = new Map<string, Employee>();
+
+    employees.forEach((employee) => {
+        const canonicalRut = normalizeRutCanonical(employee.rut);
+        if (!canonicalRut) return;
+        if (!map.has(canonicalRut)) {
+            map.set(canonicalRut, employee);
+        }
+    });
+
+    return Array.from(map.values());
+};
 
 export const useEmployeeSync = (
     onSyncSuccess?: () => void,
@@ -89,7 +115,7 @@ export const useEmployeeSync = (
             if (result.success && result.data) {
                 // Mapeo según estructura del Sheet:
                 // Col 0: N° (índice), Col 1: Nombres, Col 2: Primer Apellido, Col 3: Segundo Apellido, Col 4: RUT
-                const cloudEmployees: Employee[] = result.data
+                const cloudEmployees = dedupeEmployeesByRut(result.data
                     .filter((row: unknown[]) => row && row[1]) // Filtrar filas sin nombre
                     .map((row: unknown[]) => {
                         const nombres = String(row[1] || '').trim();
@@ -108,7 +134,8 @@ export const useEmployeeSync = (
                             rut: rut
                         };
                     })
-                    .filter((emp: Employee) => emp.nombre && emp.rut); // Filtrar registros incompletos
+                    .map(normalizeEmployeePayload)
+                    .filter((emp: Employee | null): emp is Employee => emp !== null));
 
                 // Ordenar alfabéticamente
                 cloudEmployees.sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -197,9 +224,15 @@ export const useEmployeeSync = (
         setSyncError(false);
 
         try {
+            const normalizedData = dedupeEmployeesByRut(
+                dataToSync
+                    .map(normalizeEmployeePayload)
+                    .filter((employee): employee is Employee => employee !== null)
+            );
+
             // Preparar datos para el Sheet
             // Estructura: N°, Nombres, Primer Apellido, Segundo Apellido, RUT
-            const sheetData = dataToSync.map((emp, index) => {
+            const sheetData = normalizedData.map((emp, index) => {
                 // Intentar separar el nombre en partes
                 const parts = emp.nombre.split(' ');
                 let nombres = '';
@@ -257,7 +290,7 @@ export const useEmployeeSync = (
                         action: 'sync_to_cloud',
                         actorEmail,
                         metadata: {
-                            total: dataToSync.length
+                            total: normalizedData.length
                         }
                     });
                 } catch (realtimeError) {
@@ -280,28 +313,63 @@ export const useEmployeeSync = (
     }, [onSyncSuccess, onSyncError, actorEmail]);
 
     const addEmployee = useCallback((employee: Employee) => {
+        const normalizedEmployee = normalizeEmployeePayload(employee);
+        if (!normalizedEmployee) {
+            onSyncError?.('No se pudo guardar: RUT inválido para funcionario.');
+            return;
+        }
+
         setEmployees(prev => {
-            const updated = [...prev, employee].sort((a, b) => a.nombre.localeCompare(b.nombre));
+            const alreadyExists = prev.some(
+                current => normalizeRutCanonical(current.rut) === normalizeRutCanonical(normalizedEmployee.rut)
+            );
+
+            if (alreadyExists) {
+                onSyncError?.('No se pudo guardar: ya existe un funcionario con ese RUT.');
+                return prev;
+            }
+
+            const updated = [...prev, normalizedEmployee].sort((a, b) => a.nombre.localeCompare(b.nombre));
             // Sincronizar en segundo plano
             syncEmployeesToCloud(updated);
             return updated;
         });
-    }, [syncEmployeesToCloud]);
+    }, [onSyncError, syncEmployeesToCloud]);
 
     const updateEmployee = useCallback((oldRut: string, updatedEmployee: Employee) => {
+        const normalizedEmployee = normalizeEmployeePayload(updatedEmployee);
+        if (!normalizedEmployee) {
+            onSyncError?.('No se pudo actualizar: RUT inválido para funcionario.');
+            return;
+        }
+
         setEmployees(prev => {
+            const oldCanonicalRut = normalizeRutCanonical(oldRut);
+            const hasDuplicateRut = prev.some(current => {
+                const currentCanonicalRut = normalizeRutCanonical(current.rut);
+                if (!currentCanonicalRut) return false;
+                if (currentCanonicalRut === oldCanonicalRut) return false;
+                return currentCanonicalRut === normalizeRutCanonical(normalizedEmployee.rut);
+            });
+
+            if (hasDuplicateRut) {
+                onSyncError?.('No se pudo actualizar: ya existe otro funcionario con ese RUT.');
+                return prev;
+            }
+
             const updated = prev.map(e =>
-                e.rut === oldRut ? updatedEmployee : e
+                normalizeRutCanonical(e.rut) === oldCanonicalRut ? normalizedEmployee : e
             ).sort((a, b) => a.nombre.localeCompare(b.nombre));
             // Sincronizar en segundo plano
             syncEmployeesToCloud(updated);
             return updated;
         });
-    }, [syncEmployeesToCloud]);
+    }, [onSyncError, syncEmployeesToCloud]);
 
     const deleteEmployee = useCallback((rut: string) => {
         setEmployees(prev => {
-            const updated = prev.filter(e => e.rut !== rut);
+            const targetRut = normalizeRutCanonical(rut);
+            const updated = prev.filter(e => normalizeRutCanonical(e.rut) !== targetRut);
             // Sincronizar en segundo plano
             syncEmployeesToCloud(updated);
             return updated;

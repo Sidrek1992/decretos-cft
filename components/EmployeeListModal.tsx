@@ -11,6 +11,15 @@ import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc, getRecordDateValue } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
 import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
+import {
+  buildRutConflictMessage,
+  findEmployeeByRut,
+  findRutNameConflict,
+  formatRutForStorage,
+  isValidRutModulo11,
+  normalizeIdentityName,
+  normalizeRutCanonical,
+} from '../utils/rutIntegrity';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { logger } from '../utils/logger';
 import EmployeeTimeline from './EmployeeTimeline';
@@ -75,6 +84,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   // Importación masiva
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState<Employee[]>([]);
+  const [importRejected, setImportRejected] = useState<Array<{ nombre: string; rut: string; reason: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Calcular estadísticas por funcionario (ANTES del return condicional para cumplir reglas de hooks)
@@ -243,19 +253,52 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     return <AlertTriangle size={12} />;
   };
 
+  const validateEmployeeIdentity = (
+    nombre: string,
+    rut: string,
+    options: { ignoreEmployeeRut?: string; ignoreEmployeeName?: string } = {}
+  ): { normalizedName: string; normalizedRut: string } | null => {
+    const normalizedName = String(nombre || '').trim().toUpperCase();
+    const normalizedRut = formatRutForStorage(rut);
+
+    if (!normalizedName || !String(rut || '').trim()) {
+      alert('Nombre y RUT son obligatorios.');
+      return null;
+    }
+
+    if (!isValidRutModulo11(rut) || !normalizedRut) {
+      alert('RUT inválido. Verifica dígito verificador (Módulo 11).');
+      return null;
+    }
+
+    const duplicate = findEmployeeByRut(employees, normalizedRut, options.ignoreEmployeeRut);
+    if (duplicate) {
+      alert(`Ya existe un funcionario con ese RUT (${duplicate.nombre}).`);
+      return null;
+    }
+
+    const conflict = findRutNameConflict(normalizedRut, normalizedName, employees, records, {
+      ignoreEmployeeRut: options.ignoreEmployeeRut,
+      ignoreEmployeeName: options.ignoreEmployeeName,
+    });
+    if (conflict) {
+      alert(buildRutConflictMessage(conflict));
+      return null;
+    }
+
+    return { normalizedName, normalizedRut };
+  };
+
   const handleAddEmployee = () => {
     if (!newEmployee.nombre.trim() || !newEmployee.rut.trim()) return;
     if (!onAddEmployee) return; // ★ Verificar que existe
 
-    // Validar RUT duplicado
-    if (employees.some(e => e.rut === newEmployee.rut)) {
-      alert('Ya existe un funcionario con este RUT');
-      return;
-    }
+    const validated = validateEmployeeIdentity(newEmployee.nombre, newEmployee.rut);
+    if (!validated) return;
 
     onAddEmployee({
-      nombre: newEmployee.nombre.trim().toUpperCase(),
-      rut: newEmployee.rut.trim()
+      nombre: validated.normalizedName,
+      rut: validated.normalizedRut,
     });
     setNewEmployee({ nombre: '', rut: '' });
     setShowAddForm(false);
@@ -308,16 +351,20 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   const saveEdit = (oldRut: string) => {
     if (!editForm.nombre.trim() || !editForm.rut.trim()) return;
 
-    // Validar RUT duplicado si cambió
-    if (editForm.rut !== oldRut && employees.some(e => e.rut === editForm.rut)) {
-      alert('Ya existe un funcionario con este RUT');
-      return;
-    }
+    const previousEmployee = employees.find(
+      e => normalizeRutCanonical(e.rut) === normalizeRutCanonical(oldRut)
+    );
+
+    const validated = validateEmployeeIdentity(editForm.nombre, editForm.rut, {
+      ignoreEmployeeRut: oldRut,
+      ignoreEmployeeName: previousEmployee?.nombre,
+    });
+    if (!validated) return;
 
     if (onUpdateEmployee) {
       onUpdateEmployee(oldRut, {
-        nombre: editForm.nombre.trim().toUpperCase(),
-        rut: editForm.rut.trim()
+        nombre: validated.normalizedName,
+        rut: validated.normalizedRut,
       });
     }
     setEditingEmployee(null);
@@ -347,7 +394,10 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
         // Procesar filas (asumiendo: Nombre en col 0/1, RUT en col 1/2)
         const imported: Employee[] = [];
-        for (let i = 1; i < jsonData.length; i++) { // Saltar header
+        const rejected: Array<{ nombre: string; rut: string; reason: string }> = [];
+        const seenInFile = new Map<string, string>();
+
+        for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || row.length < 2) continue;
 
@@ -367,12 +417,66 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
             }
           }
 
-          if (nombre && rut && !employees.some(e => e.rut === rut)) {
-            imported.push({ nombre, rut });
+          if (!nombre || !rut) continue;
+
+          if (!isValidRutModulo11(rut)) {
+            rejected.push({ nombre, rut, reason: 'RUT inválido (Módulo 11)' });
+            continue;
           }
+
+          const normalizedRut = formatRutForStorage(rut);
+          const canonicalRut = normalizeRutCanonical(normalizedRut);
+          const normalizedName = nombre.trim().toUpperCase();
+
+          if (!normalizedRut || !canonicalRut) {
+            rejected.push({ nombre, rut, reason: 'RUT inválido' });
+            continue;
+          }
+
+          const existingEmployee = findEmployeeByRut(employees, normalizedRut);
+          if (existingEmployee) {
+            rejected.push({
+              nombre,
+              rut: normalizedRut,
+              reason: `RUT ya existe (${existingEmployee.nombre})`,
+            });
+            continue;
+          }
+
+          const conflict = findRutNameConflict(normalizedRut, normalizedName, employees, records);
+          if (conflict) {
+            rejected.push({
+              nombre,
+              rut: normalizedRut,
+              reason: buildRutConflictMessage(conflict),
+            });
+            continue;
+          }
+
+          const existingInFile = seenInFile.get(canonicalRut);
+          if (existingInFile) {
+            if (normalizeIdentityName(existingInFile) !== normalizeIdentityName(normalizedName)) {
+              rejected.push({
+                nombre,
+                rut: normalizedRut,
+                reason: `RUT duplicado con distinto nombre dentro del archivo (${existingInFile})`,
+              });
+            } else {
+              rejected.push({
+                nombre,
+                rut: normalizedRut,
+                reason: 'RUT duplicado dentro del archivo',
+              });
+            }
+            continue;
+          }
+
+          seenInFile.set(canonicalRut, normalizedName);
+          imported.push({ nombre: normalizedName, rut: normalizedRut });
         }
 
         setImportData(imported);
+        setImportRejected(rejected);
         setShowImportModal(true);
       };
 
@@ -390,6 +494,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     if (!onAddEmployee) return; // ★ Verificar que existe
     importData.forEach(emp => onAddEmployee(emp));
     setImportData([]);
+    setImportRejected([]);
     setShowImportModal(false);
     employeeModalLogger.info(`Importados ${importData.length} funcionarios`);
   };
@@ -987,7 +1092,10 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="absolute inset-0 z-[160] flex items-center justify-center p-4" onClick={() => setShowImportModal(false)}>
+        <div
+          className="absolute inset-0 z-[160] flex items-center justify-center p-4"
+          onClick={() => { setShowImportModal(false); setImportRejected([]); }}
+        >
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
@@ -995,16 +1103,21 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                 <Upload size={24} />
                 <div>
                   <h3 className="text-lg font-black uppercase tracking-tight">Importar Funcionarios</h3>
-                  <p className="text-[10px] font-bold opacity-70">{importData.length} nuevos funcionarios detectados</p>
+                  <p className="text-[10px] font-bold opacity-70">
+                    {importData.length} válidos · {importRejected.length} rechazados
+                  </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 max-h-64 overflow-y-auto custom-scrollbar">
+            <div className="p-4 max-h-72 overflow-y-auto custom-scrollbar space-y-4">
               {importData.length === 0 ? (
                 <p className="text-center text-slate-400 text-sm py-4">No se encontraron nuevos funcionarios para importar</p>
               ) : (
                 <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Registros válidos
+                  </p>
                   {importData.slice(0, 20).map((emp, i) => (
                     <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
                       <span className="text-xs font-bold text-slate-700 dark:text-white truncate flex-1">{emp.nombre}</span>
@@ -1016,11 +1129,28 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                   )}
                 </div>
               )}
+
+              {importRejected.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-red-600 dark:text-red-400">
+                    Rechazados por validación
+                  </p>
+                  {importRejected.slice(0, 12).map((item, i) => (
+                    <div key={`${item.rut}-${i}`} className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800">
+                      <p className="text-[10px] font-black text-red-700 dark:text-red-300 truncate">{item.nombre} · {item.rut}</p>
+                      <p className="text-[10px] text-red-600 dark:text-red-400 truncate">{item.reason}</p>
+                    </div>
+                  ))}
+                  {importRejected.length > 12 && (
+                    <p className="text-center text-[10px] text-red-400">...y {importRejected.length - 12} rechazados más</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2">
               <button
-                onClick={() => { setShowImportModal(false); setImportData([]); }}
+                onClick={() => { setShowImportModal(false); setImportData([]); setImportRejected([]); }}
                 className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[11px] font-black uppercase tracking-wider"
               >
                 Cancelar

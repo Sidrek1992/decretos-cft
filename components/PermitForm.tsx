@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PermitFormData, PermitRecord, Employee, SolicitudType } from '../types';
 import { JORNADA_OPTIONS, SOLICITUD_TYPES } from '../constants';
-import { validateRut, validateDate, CONFIG } from '../config';
+import { validateDate, CONFIG } from '../config';
 import {
   PlusCircle, Save, X, FileUp, Loader2, Sparkles, User, Fingerprint,
   Calendar, Info, ChevronDown, CheckCircle2, AlertCircle, AlertTriangle, Clock, Sun
@@ -12,6 +12,13 @@ import { extractDataFromPdf, extractFLDataFromPdf } from '../utils/aiProcessor';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
 import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
+import {
+  buildRutConflictMessage,
+  findRutNameConflict,
+  formatRutForStorage,
+  isValidRutModulo11,
+  normalizeRutCanonical,
+} from '../utils/rutIntegrity';
 
 // Función para verificar si una fecha es fin de semana
 const isWeekend = (dateString: string): boolean => {
@@ -188,7 +195,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
   const validateField = (name: string, value: string | number): string | undefined => {
     switch (name) {
       case 'rut':
-        if (value && !validateRut(String(value))) return 'RUT inválido';
+        if (value && !isValidRutModulo11(String(value))) return 'RUT inválido';
         break;
       case 'fechaInicio':
       case 'fechaTermino':
@@ -325,7 +332,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
   };
 
   const selectEmployee = (emp: Employee) => {
-    const formattedRut = formatRut(emp.rut);
+    const formattedRut = formatRutForStorage(emp.rut) || formatRut(emp.rut);
     setFormData(prev => ({ ...prev, funcionario: toProperCase(emp.nombre), rut: formattedRut }));
     setShowSuggestions(false);
     const rutError = validateField('rut', formattedRut);
@@ -381,9 +388,12 @@ const PermitForm: React.FC<PermitFormProps> = ({
     const candidateRange = getDateRange(candidate);
     if (!candidateRange) return null;
 
+    const targetRut = normalizeRutCanonical(rut);
+    if (!targetRut) return null;
+
     // Buscar registros del mismo funcionario
     const existingRecords = records.filter(r =>
-      r.rut === rut &&
+      normalizeRutCanonical(r.rut) === targetRut &&
       r.id !== editingId // Excluir el registro que estamos editando
     );
 
@@ -411,12 +421,31 @@ const PermitForm: React.FC<PermitFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: FormErrors = {};
+    const normalizedRut = formatRutForStorage(formData.rut);
+
     if (!formData.funcionario) newErrors.funcionario = 'Requerido';
     if (!formData.rut) newErrors.rut = 'Requerido';
-    else if (!validateRut(formData.rut)) newErrors.rut = 'RUT inválido';
+    else if (!isValidRutModulo11(formData.rut) || !normalizedRut) newErrors.rut = 'RUT inválido';
     if (!formData.fechaInicio) newErrors.fechaInicio = 'Requerido';
     else if (!validateDate(formData.fechaInicio)) newErrors.fechaInicio = 'Fecha inválida';
     else if (isWeekend(formData.fechaInicio)) newErrors.fechaInicio = 'Fin de semana';
+
+    if (!newErrors.rut && normalizedRut) {
+      const identityConflict = findRutNameConflict(
+        normalizedRut,
+        formData.funcionario,
+        employees,
+        records,
+        { ignoreRecordId: editingRecord?.id }
+      );
+
+      if (identityConflict) {
+        newErrors.rut = 'RUT asociado a otro nombre';
+        setFormError(buildRutConflictMessage(identityConflict));
+        setErrors(newErrors);
+        return;
+      }
+    }
 
     if (formData.solicitudType === 'FL') {
       if (!formData.fechaTermino) newErrors.fechaTermino = 'Requerido';
@@ -465,13 +494,13 @@ const PermitForm: React.FC<PermitFormProps> = ({
     }
 
     // ★ VALIDACIÓN DE CONFLICTO DE FECHAS
-    if (formData.fechaInicio && formData.rut) {
+    if (formData.fechaInicio && normalizedRut) {
       const conflictingRecord = checkDateConflict({
         solicitudType: formData.solicitudType,
         fechaInicio: formData.fechaInicio,
         fechaTermino: formData.fechaTermino,
         cantidadDias: formData.cantidadDias,
-      }, formData.rut, editingRecord?.id);
+      }, normalizedRut, editingRecord?.id);
 
       if (conflictingRecord) {
         newErrors.fechaInicio = 'Conflicto de fechas';
@@ -495,7 +524,12 @@ const PermitForm: React.FC<PermitFormProps> = ({
       return;
     }
 
-    const dataToSubmit = { ...formData, saldoFinalP1, saldoFinalP2 };
+    const dataToSubmit = {
+      ...formData,
+      rut: normalizedRut,
+      saldoFinalP1,
+      saldoFinalP2,
+    };
     onSubmit(dataToSubmit);
     if (!editingRecord) {
       // Resetear con el correlativo correspondiente al tipo por defecto (PA)
@@ -669,7 +703,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
                     value={formData.rut || '00.000.000-0'}
                     className={`w-full pl-12 pr-10 py-4 bg-slate-100 dark:bg-slate-700/50 border rounded-xl font-mono font-bold text-slate-500 dark:text-slate-400 outline-none text-sm ${errors.rut ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                   />
-                  {formData.rut && validateRut(formData.rut) && (
+                  {formData.rut && isValidRutModulo11(formData.rut) && (
                     <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
                   )}
                 </div>

@@ -694,18 +694,6 @@ const AppContent: React.FC = () => {
               </button>
             </div>
 
-            {/* ─── GRUPO: PERSONAL (visible en lg+) ─── */}
-            <div className="hidden lg:flex items-center gap-0.5">
-              <button
-                onClick={() => openModal('employeeList')}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
-                title="Gestión de personal"
-              >
-                <Users className="w-5 h-5" />
-                <span className="text-[10px] font-black">{employees.length}</span>
-              </button>
-            </div>
-
             {/* ─── GRUPO: EXPORTAR (visible en lg+) ─── */}
             <div className="hidden lg:flex items-center gap-0.5">
               <button
@@ -841,10 +829,10 @@ const AppContent: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 page-fade-in">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:pl-2 lg:pr-6 py-8 sm:py-10 page-fade-in">
         <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 xl:gap-8">
           {/* Panel vertical izquierdo (desktop) */}
-          <aside className="hidden lg:block">
+          <aside className="hidden lg:block lg:-ml-2">
             <div className="sticky top-24">
               <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800 dark:to-indigo-900/20">
@@ -853,6 +841,25 @@ const AppContent: React.FC = () => {
                 </div>
 
                 <div className="p-2 space-y-1.5">
+                  <button
+                    onClick={() => openModal('employeeList')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${modals.employeeList
+                      ? 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      }`}
+                  >
+                    <div className={`p-1.5 rounded-lg ${modals.employeeList ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-black uppercase tracking-wider">Gestión de personal</p>
+                      <p className="text-[10px] opacity-70">Funcionarios registrados</p>
+                    </div>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-black bg-white/80 dark:bg-slate-700/80 border border-slate-200 dark:border-slate-600">
+                      {employees.length}
+                    </span>
+                  </button>
+
                   <button
                     onClick={() => setShowDashboard(p => !p)}
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${showDashboard
