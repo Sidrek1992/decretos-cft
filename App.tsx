@@ -11,6 +11,7 @@ import AdminPanel from './components/AdminPanel';
 import CommandPalette from './components/CommandPalette';
 import ScrollToTop from './components/ScrollToTop';
 import WelcomeBanner from './components/WelcomeBanner';
+import OperationalOverview from './components/OperationalOverview';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Lazy load heavy modals for better initial performance
@@ -55,65 +56,6 @@ import {
   Database, CheckCircle, Users, AlertCircle, Moon, Sun, Undo2, Keyboard, CalendarDays, Palette, Printer, LogOut, Settings,
   Menu, X, ChevronDown, ChevronRight, Zap, Shield, Eye
 } from 'lucide-react';
-
-interface OperationalSummaryItem {
-  id: string;
-  funcionario: string;
-  rut: string;
-  solicitudType: 'PA' | 'FL';
-  start: Date;
-  end: Date;
-  startKey: string;
-  endKey: string;
-  totalDays: number;
-}
-
-type OperationalModalType = 'startsToday' | 'startsTomorrow' | 'activeNow' | null;
-
-const MAX_OPERATIONAL_ITEMS = 6;
-
-const toOperationalDateKey = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const parseOperationalDate = (value?: string): Date | null => {
-  if (!value) return null;
-  const parsed = new Date(`${value}T12:00:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const getOperationalRange = (
-  record: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>
-): { start: Date; end: Date } | null => {
-  const start = parseOperationalDate(record.fechaInicio);
-  if (!start) return null;
-
-  let end: Date | null = null;
-  if (record.solicitudType === 'FL' && record.fechaTermino) {
-    end = parseOperationalDate(record.fechaTermino);
-  }
-
-  if (!end || end < start) {
-    const days = Math.max(Math.ceil(Number(record.cantidadDias || 1)), 1);
-    end = new Date(start);
-    end.setDate(start.getDate() + days - 1);
-  }
-
-  return { start, end };
-};
-
-const formatOperationalShortDate = (date: Date): string => {
-  return date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
-};
-
-const getOperationalTypeBadgeClass = (type: 'PA' | 'FL'): string => {
-  return type === 'PA'
-    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700'
-    : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700';
-};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MOBILE MENU COMPONENT
@@ -432,7 +374,6 @@ const AppContent: React.FC = () => {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [requestedSolicitudType, setRequestedSolicitudType] = useState<SolicitudType | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [operationalModal, setOperationalModal] = useState<OperationalModalType>(null);
 
   // Hook centralizado para modales
   const { modals, openModal, closeModal } = useModals();
@@ -501,83 +442,6 @@ const AppContent: React.FC = () => {
     });
     return count;
   }, [records, employees]);
-
-  const operationalOverview = useMemo(() => {
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    const todayKey = toOperationalDateKey(today);
-    const tomorrowKey = toOperationalDateKey(tomorrow);
-
-    const entries: OperationalSummaryItem[] = records
-      .filter(record => record.solicitudType === 'PA' || record.solicitudType === 'FL')
-      .map(record => {
-        const range = getOperationalRange(record);
-        if (!range) return null;
-
-        const totalDays = Math.max(
-          Math.floor((range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
-          1
-        );
-
-        return {
-          id: record.id,
-          funcionario: record.funcionario,
-          rut: record.rut,
-          solicitudType: record.solicitudType,
-          start: range.start,
-          end: range.end,
-          startKey: toOperationalDateKey(range.start),
-          endKey: toOperationalDateKey(range.end),
-          totalDays
-        };
-      })
-      .filter((entry): entry is OperationalSummaryItem => entry !== null)
-      .sort((a, b) => a.start.getTime() - b.start.getTime() || a.funcionario.localeCompare(b.funcionario, 'es', { sensitivity: 'base' }));
-
-    const startsToday = entries.filter(entry => entry.startKey === todayKey);
-    const startsTomorrow = entries.filter(entry => entry.startKey === tomorrowKey);
-    const activeNow = entries
-      .filter(entry => entry.startKey <= todayKey && entry.endKey >= todayKey)
-      .sort((a, b) => a.end.getTime() - b.end.getTime() || a.funcionario.localeCompare(b.funcionario, 'es', { sensitivity: 'base' }));
-
-    return {
-      startsToday,
-      startsTomorrow,
-      activeNow,
-      todayKey,
-      todayLabel: today.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' }),
-      tomorrowLabel: tomorrow.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' })
-    };
-  }, [records]);
-
-  const operationalModalData = useMemo(() => {
-    if (!operationalModal) return null;
-
-    if (operationalModal === 'startsToday') {
-      return {
-        title: 'Inician hoy',
-        subtitle: operationalOverview.todayLabel,
-        items: operationalOverview.startsToday
-      };
-    }
-
-    if (operationalModal === 'startsTomorrow') {
-      return {
-        title: 'Inician mañana',
-        subtitle: operationalOverview.tomorrowLabel,
-        items: operationalOverview.startsTomorrow
-      };
-    }
-
-    return {
-      title: 'Actualmente vigentes',
-      subtitle: 'Permisos administrativos y feriados legales en curso hoy',
-      items: operationalOverview.activeNow
-    };
-  }, [operationalModal, operationalOverview]);
 
   const handleSubmit = (formData: PermitFormData) => {
     const actor = user?.email || 'sistema';
@@ -774,48 +638,6 @@ const AppContent: React.FC = () => {
 
     return user?.email;
   }, [profile, user]);
-
-  const renderOperationalItem = (item: OperationalSummaryItem, keyPrefix: string, mode: 'start' | 'active' = 'start') => {
-    const endsToday = item.endKey === operationalOverview.todayKey;
-    const dateLabel = item.startKey === item.endKey
-      ? mode === 'active'
-        ? `Día actual: ${formatOperationalShortDate(item.start)}`
-        : `Jornada: ${formatOperationalShortDate(item.start)}`
-      : mode === 'active'
-        ? `En curso: ${formatOperationalShortDate(item.start)} - ${formatOperationalShortDate(item.end)}`
-        : `Rango: ${formatOperationalShortDate(item.start)} - ${formatOperationalShortDate(item.end)}`;
-
-    return (
-      <div
-        key={`${keyPrefix}-${item.id}`}
-        className={`p-2.5 rounded-xl border ${endsToday
-          ? 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-900/20'
-          : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30'
-          }`}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{item.funcionario}</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{item.rut}</p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {endsToday && (
-              <span className="px-2 py-0.5 rounded-md border border-rose-300 dark:border-rose-700 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-[10px] font-black">
-                Termina hoy
-              </span>
-            )}
-            <span className={`px-2 py-0.5 rounded-md border text-[10px] font-black ${getOperationalTypeBadgeClass(item.solicitudType)}`}>
-              {item.solicitudType}
-            </span>
-          </div>
-        </div>
-        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-          {dateLabel}
-          {` · ${item.totalDays} día${item.totalDays !== 1 ? 's' : ''}`}
-        </p>
-      </div>
-    );
-  };
 
   return (
     <div className="min-h-screen">
@@ -1066,125 +888,7 @@ const AppContent: React.FC = () => {
 
         <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
 
-        {/* Resumen operativo diario */}
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
-                  <CalendarDays className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Inician hoy</h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{operationalOverview.todayLabel}</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-black">
-                {operationalOverview.startsToday.length}
-              </span>
-            </div>
-            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-              {operationalOverview.startsToday.slice(0, MAX_OPERATIONAL_ITEMS).map(item =>
-                renderOperationalItem(item, 'start-today', 'start')
-              )}
-              {operationalOverview.startsToday.length > MAX_OPERATIONAL_ITEMS && (
-                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
-                  +{operationalOverview.startsToday.length - MAX_OPERATIONAL_ITEMS} registros más
-                </p>
-              )}
-              {operationalOverview.startsToday.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setOperationalModal('startsToday')}
-                  className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  Ver todo
-                </button>
-              )}
-              {operationalOverview.startsToday.length === 0 && (
-                <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para hoy.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300">
-                  <ChevronRight className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Inician mañana</h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{operationalOverview.tomorrowLabel}</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-black">
-                {operationalOverview.startsTomorrow.length}
-              </span>
-            </div>
-            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-              {operationalOverview.startsTomorrow.slice(0, MAX_OPERATIONAL_ITEMS).map(item =>
-                renderOperationalItem(item, 'start-tomorrow', 'start')
-              )}
-              {operationalOverview.startsTomorrow.length > MAX_OPERATIONAL_ITEMS && (
-                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
-                  +{operationalOverview.startsTomorrow.length - MAX_OPERATIONAL_ITEMS} registros más
-                </p>
-              )}
-              {operationalOverview.startsTomorrow.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setOperationalModal('startsTomorrow')}
-                  className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  Ver todo
-                </button>
-              )}
-              {operationalOverview.startsTomorrow.length === 0 && (
-                <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para mañana.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300">
-                  <Users className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Actualmente vigentes</h3>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500">PA y FL en curso hoy</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-black">
-                {operationalOverview.activeNow.length}
-              </span>
-            </div>
-            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-              {operationalOverview.activeNow.slice(0, MAX_OPERATIONAL_ITEMS).map(item =>
-                renderOperationalItem(item, 'active', 'active')
-              )}
-              {operationalOverview.activeNow.length > MAX_OPERATIONAL_ITEMS && (
-                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
-                  +{operationalOverview.activeNow.length - MAX_OPERATIONAL_ITEMS} registros más
-                </p>
-              )}
-              {operationalOverview.activeNow.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setOperationalModal('activeNow')}
-                  className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  Ver todo
-                </button>
-              )}
-              {operationalOverview.activeNow.length === 0 && (
-                <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay PA o FL vigentes hoy.</p>
-              )}
-            </div>
-          </div>
-        </section>
+        <OperationalOverview records={records} />
 
         {/* Dashboard condicional (lazy loaded) */}
         {showDashboard && (
@@ -1302,48 +1006,6 @@ const AppContent: React.FC = () => {
           </section>
         </div>
       </main>
-
-      {/* Modal resumen operativo completo */}
-      {operationalModalData && (
-        <div
-          className="fixed inset-0 z-[145] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setOperationalModal(null)}
-        >
-          <div
-            className="w-full max-w-3xl max-h-[85vh] bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-2xl"
-            onClick={event => event.stopPropagation()}
-          >
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                  {operationalModalData.title}
-                </h3>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                  {operationalModalData.subtitle} · {operationalModalData.items.length} registro{operationalModalData.items.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOperationalModal(null)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                title="Cerrar"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-2.5 overflow-y-auto max-h-[calc(85vh-76px)] custom-scrollbar">
-              {operationalModalData.items.length > 0 ? (
-                operationalModalData.items.map(item =>
-                  renderOperationalItem(item, 'modal-operational', operationalModal === 'activeNow' ? 'active' : 'start')
-                )
-              ) : (
-                <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-10">Sin registros para mostrar.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal de empleados (lazy loaded) */}
       {modals.employeeList && (

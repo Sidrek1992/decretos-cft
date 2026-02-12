@@ -29,6 +29,7 @@ import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
 import { normalizeSearchText } from '../utils/search';
 import { CONFIG } from '../config';
+import OperationalOverview from './OperationalOverview';
 
 interface DashboardProps {
     records: PermitRecord[];
@@ -47,61 +48,6 @@ const COLORS = {
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-interface OperationalEntry {
-    id: string;
-    funcionario: string;
-    rut: string;
-    solicitudType: 'PA' | 'FL';
-    start: Date;
-    end: Date;
-    startKey: string;
-    endKey: string;
-    totalDays: number;
-}
-
-const toDateKey = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
-
-const parseDateFromRecord = (value: string | undefined): Date | null => {
-    if (!value) return null;
-    const parsed = new Date(`${value}T12:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const getOperationalRange = (
-    record: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>
-): { start: Date; end: Date } | null => {
-    const start = parseDateFromRecord(record.fechaInicio);
-    if (!start) return null;
-
-    let end: Date | null = null;
-    if (record.solicitudType === 'FL' && record.fechaTermino) {
-        end = parseDateFromRecord(record.fechaTermino);
-    }
-
-    if (!end || end < start) {
-        const days = Math.max(Math.ceil(Number(record.cantidadDias || 1)), 1);
-        end = new Date(start);
-        end.setDate(start.getDate() + days - 1);
-    }
-
-    return { start, end };
-};
-
-const formatShortDate = (date: Date): string => {
-    return date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
-};
-
-const getTypeBadgeClasses = (type: 'PA' | 'FL'): string => {
-    return type === 'PA'
-        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700'
-        : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700';
-};
 
 const getAnalyticsDays = (record: PermitRecord): number => {
     const cantidadDias = Number(record.cantidadDias || 0);
@@ -659,64 +605,6 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
         return `${MONTH_NAMES_FULL[monthFilter]} ${yearFilter}`;
     }, [yearFilter, monthFilter]);
 
-    const operationalStatus = useMemo(() => {
-        const today = new Date();
-        today.setHours(12, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1);
-
-        const todayKey = toDateKey(today);
-        const tomorrowKey = toDateKey(tomorrow);
-
-        const entries: OperationalEntry[] = records
-            .filter(record => record.solicitudType === 'PA' || record.solicitudType === 'FL')
-            .map(record => {
-                const range = getOperationalRange(record);
-                if (!range) return null;
-
-                const totalDays = Math.max(
-                    Math.floor((range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
-                    1
-                );
-
-                return {
-                    id: record.id,
-                    funcionario: record.funcionario,
-                    rut: record.rut,
-                    solicitudType: record.solicitudType,
-                    start: range.start,
-                    end: range.end,
-                    startKey: toDateKey(range.start),
-                    endKey: toDateKey(range.end),
-                    totalDays
-                };
-            })
-            .filter((entry): entry is OperationalEntry => entry !== null)
-            .sort((a, b) => a.start.getTime() - b.start.getTime() || a.funcionario.localeCompare(b.funcionario, 'es', { sensitivity: 'base' }));
-
-        const startsToday = entries.filter(entry => entry.startKey === todayKey);
-        const startsTomorrow = entries.filter(entry => entry.startKey === tomorrowKey);
-        const activeNow = entries
-            .filter(entry => entry.startKey <= todayKey && entry.endKey >= todayKey)
-            .sort((a, b) => a.end.getTime() - b.end.getTime() || a.funcionario.localeCompare(b.funcionario, 'es', { sensitivity: 'base' }));
-
-        return {
-            startsToday,
-            startsTomorrow,
-            activeNow,
-            todayLabel: today.toLocaleDateString('es-CL', {
-                weekday: 'short',
-                day: '2-digit',
-                month: '2-digit'
-            }),
-            tomorrowLabel: tomorrow.toLocaleDateString('es-CL', {
-                weekday: 'short',
-                day: '2-digit',
-                month: '2-digit'
-            })
-        };
-    }, [records]);
-
     // ---------------------------------------------------------------------------
     // Cálculos centralizados
     // ---------------------------------------------------------------------------
@@ -1230,134 +1118,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                 />
             )}
 
-            {/* ─── Estado operativo hoy/manana ─── */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
-                                <Calendar className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Inician hoy</h3>
-                                <p className="text-[10px] text-slate-400 dark:text-slate-500">{operationalStatus.todayLabel}</p>
-                            </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-black">
-                            {operationalStatus.startsToday.length}
-                        </span>
-                    </div>
-
-                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-                        {operationalStatus.startsToday.map(entry => (
-                            <div key={`today-${entry.id}`} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{entry.funcionario}</p>
-                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{entry.rut}</p>
-                                    </div>
-                                    <span className={`px-2 py-0.5 rounded-md border text-[10px] font-black ${getTypeBadgeClasses(entry.solicitudType)}`}>
-                                        {entry.solicitudType}
-                                    </span>
-                                </div>
-                                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                                    {entry.startKey === entry.endKey
-                                        ? `Jornada: ${formatShortDate(entry.start)}`
-                                        : `Rango: ${formatShortDate(entry.start)} - ${formatShortDate(entry.end)}`}
-                                    {` · ${entry.totalDays} dia${entry.totalDays !== 1 ? 's' : ''}`}
-                                </p>
-                            </div>
-                        ))}
-                        {operationalStatus.startsToday.length === 0 && (
-                            <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para hoy.</p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300">
-                                <Clock className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Inician manana</h3>
-                                <p className="text-[10px] text-slate-400 dark:text-slate-500">{operationalStatus.tomorrowLabel}</p>
-                            </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-black">
-                            {operationalStatus.startsTomorrow.length}
-                        </span>
-                    </div>
-
-                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-                        {operationalStatus.startsTomorrow.map(entry => (
-                            <div key={`tomorrow-${entry.id}`} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{entry.funcionario}</p>
-                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{entry.rut}</p>
-                                    </div>
-                                    <span className={`px-2 py-0.5 rounded-md border text-[10px] font-black ${getTypeBadgeClasses(entry.solicitudType)}`}>
-                                        {entry.solicitudType}
-                                    </span>
-                                </div>
-                                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                                    {entry.startKey === entry.endKey
-                                        ? `Jornada: ${formatShortDate(entry.start)}`
-                                        : `Rango: ${formatShortDate(entry.start)} - ${formatShortDate(entry.end)}`}
-                                    {` · ${entry.totalDays} dia${entry.totalDays !== 1 ? 's' : ''}`}
-                                </p>
-                            </div>
-                        ))}
-                        {operationalStatus.startsTomorrow.length === 0 && (
-                            <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para manana.</p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300">
-                                <Sun className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Actualmente vigentes</h3>
-                                <p className="text-[10px] text-slate-400 dark:text-slate-500">PA y FL en curso hoy</p>
-                            </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-black">
-                            {operationalStatus.activeNow.length}
-                        </span>
-                    </div>
-
-                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-                        {operationalStatus.activeNow.map(entry => (
-                            <div key={`active-${entry.id}`} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{entry.funcionario}</p>
-                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{entry.rut}</p>
-                                    </div>
-                                    <span className={`px-2 py-0.5 rounded-md border text-[10px] font-black ${getTypeBadgeClasses(entry.solicitudType)}`}>
-                                        {entry.solicitudType}
-                                    </span>
-                                </div>
-                                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                                    {entry.startKey === entry.endKey
-                                        ? `Dia actual: ${formatShortDate(entry.start)}`
-                                        : `En curso: ${formatShortDate(entry.start)} - ${formatShortDate(entry.end)}`}
-                                    {` · ${entry.totalDays} dia${entry.totalDays !== 1 ? 's' : ''}`}
-                                </p>
-                            </div>
-                        ))}
-                        {operationalStatus.activeNow.length === 0 && (
-                            <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay PA o FL vigentes hoy.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <OperationalOverview records={records} />
 
             {/* ─── Gráficos principales: Area (tendencia) + Pie (distribución) ─── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
