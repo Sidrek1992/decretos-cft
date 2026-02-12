@@ -87,6 +87,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [adminAuditEntries, setAdminAuditEntries] = useState(() => getAuditLog().slice(0, 30));
 
     const upsertRemoteProfile = async ({ email, role, firstName, lastName }: RemoteProfileInput): Promise<void> => {
+        console.log('AdminPanel: Upserting profile for', email, { role, firstName, lastName });
         const { error: upsertError } = await supabase
             .from('profiles')
             .upsert({
@@ -97,6 +98,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             }, { onConflict: 'email' });
 
         if (upsertError) {
+            console.error('AdminPanel: Error in upsertRemoteProfile:', upsertError);
             throw upsertError;
         }
     };
@@ -368,10 +370,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         try {
             await upsertRemoteProfile({ email: normalizedEmail, role: userRole, firstName, lastName });
         } catch (err: any) {
+            console.error('Save Profile Error:', err);
             const detail = String(err?.message || '').trim();
             setError(detail
-                ? `No se pudo guardar el nombre en la nube: ${detail}`
-                : 'No se pudo guardar el nombre en la nube. Verifica permisos de Supabase para administradores.');
+                ? `Error de permisos: ${detail}. Asegúrate de haber ejecutado el script SQL de configuración en Supabase.`
+                : 'No se pudo guardar en la nube. Verifica que tu usuario sea Administrador en la tabla "profiles" o ejecuta el script SQL.');
             return;
         }
 

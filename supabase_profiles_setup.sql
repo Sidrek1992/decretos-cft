@@ -18,42 +18,49 @@ for select
 to authenticated
 using (true);
 
--- Cada usuario puede insertar/actualizar solo su propio perfil
+-- Cada usuario puede insertar/actualizar solo su propio perfil (usando lower para mayor seguridad)
 drop policy if exists "Users can upsert own profile" on public.profiles;
 create policy "Users can upsert own profile"
 on public.profiles
 for insert
 to authenticated
-with check (auth.jwt() ->> 'email' = email);
+with check (lower(auth.jwt() ->> 'email') = lower(email));
 
 drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
 on public.profiles
 for update
 to authenticated
-using (auth.jwt() ->> 'email' = email)
-with check (auth.jwt() ->> 'email' = email);
+using (lower(auth.jwt() ->> 'email') = lower(email))
+with check (lower(auth.jwt() ->> 'email') = lower(email));
 
 -- Admins autorizados pueden gestionar todos los perfiles
+-- Usamos tanto la lista explícita como el rol en el JWT para mayor flexibilidad
 drop policy if exists "Admins can manage all profiles" on public.profiles;
 create policy "Admins can manage all profiles"
 on public.profiles
 for all
 to authenticated
-using (lower(auth.jwt() ->> 'email') in (
-  'mguzmanahumada@gmail.com',
-  'a.gestiondepersonas@cftestatalaricayparinacota.cl',
-  'gestiondepersonas@cftestatalaricayparinacota.cl',
-  'analista.gp@cftestatalaricayparinacota.cl',
-  'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
-))
-with check (lower(auth.jwt() ->> 'email') in (
-  'mguzmanahumada@gmail.com',
-  'a.gestiondepersonas@cftestatalaricayparinacota.cl',
-  'gestiondepersonas@cftestatalaricayparinacota.cl',
-  'analista.gp@cftestatalaricayparinacota.cl',
-  'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
-));
+using (
+  lower(auth.jwt() ->> 'email') in (
+    'mguzmanahumada@gmail.com',
+    'a.gestiondepersonas@cftestatalaricayparinacota.cl',
+    'gestiondepersonas@cftestatalaricayparinacota.cl',
+    'analista.gp@cftestatalaricayparinacota.cl',
+    'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
+  )
+  OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+)
+with check (
+  lower(auth.jwt() ->> 'email') in (
+    'mguzmanahumada@gmail.com',
+    'a.gestiondepersonas@cftestatalaricayparinacota.cl',
+    'gestiondepersonas@cftestatalaricayparinacota.cl',
+    'analista.gp@cftestatalaricayparinacota.cl',
+    'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
+  )
+  OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+);
 
 create or replace function public.set_profiles_updated_at()
 returns trigger
