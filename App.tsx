@@ -888,7 +888,7 @@ const AppContent: React.FC = () => {
 
         <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
 
-        <OperationalOverview records={records} />
+        <OperationalOverview records={records} variant="compact" />
 
         {/* Dashboard condicional (lazy loaded) */}
         {showDashboard && (

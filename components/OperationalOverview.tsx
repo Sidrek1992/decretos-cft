@@ -6,6 +6,7 @@ interface OperationalOverviewProps {
   records: PermitRecord[];
   maxItems?: number;
   className?: string;
+  variant?: 'full' | 'compact';
 }
 
 interface OperationalItem {
@@ -71,8 +72,10 @@ const OperationalOverview: React.FC<OperationalOverviewProps> = ({
   records,
   maxItems = DEFAULT_MAX_ITEMS,
   className,
+  variant = 'full',
 }) => {
   const [operationalModal, setOperationalModal] = useState<OperationalModalType>(null);
+  const isCompact = variant === 'compact';
 
   const overview = useMemo(() => {
     const today = new Date();
@@ -205,15 +208,18 @@ const OperationalOverview: React.FC<OperationalOverviewProps> = ({
     );
   };
 
-  const sectionClassName = className
-    ? `grid grid-cols-1 xl:grid-cols-3 gap-4 ${className}`
+  const sectionBaseClassName = isCompact
+    ? 'grid grid-cols-1 md:grid-cols-3 gap-3'
     : 'grid grid-cols-1 xl:grid-cols-3 gap-4';
+  const sectionClassName = className
+    ? `${sectionBaseClassName} ${className}`
+    : sectionBaseClassName;
 
   return (
     <>
       <section className={sectionClassName}>
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between mb-3">
+        <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 ${isCompact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}>
+          <div className={`flex items-center justify-between ${isCompact ? 'mb-2' : 'mb-3'}`}>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
                 <CalendarDays className="w-4 h-4" />
@@ -228,30 +234,47 @@ const OperationalOverview: React.FC<OperationalOverviewProps> = ({
             </span>
           </div>
 
-          <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-            {overview.startsToday.slice(0, maxItems).map(item => renderOperationalItem(item, 'start-today', 'start'))}
-            {overview.startsToday.length > maxItems && (
-              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
-                +{overview.startsToday.length - maxItems} registros más
+          {isCompact ? (
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {overview.startsToday.length > 0
+                  ? `${overview.startsToday.length} registro${overview.startsToday.length !== 1 ? 's' : ''} programado${overview.startsToday.length !== 1 ? 's' : ''} para hoy.`
+                  : 'Sin inicios para hoy.'}
               </p>
-            )}
-            {overview.startsToday.length > 0 && (
               <button
                 type="button"
                 onClick={() => setOperationalModal('startsToday')}
-                className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
                 Ver todo
               </button>
-            )}
-            {overview.startsToday.length === 0 && (
-              <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para hoy.</p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+              {overview.startsToday.slice(0, maxItems).map(item => renderOperationalItem(item, 'start-today', 'start'))}
+              {overview.startsToday.length > maxItems && (
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
+                  +{overview.startsToday.length - maxItems} registros más
+                </p>
+              )}
+              {overview.startsToday.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOperationalModal('startsToday')}
+                  className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Ver todo
+                </button>
+              )}
+              {overview.startsToday.length === 0 && (
+                <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para hoy.</p>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between mb-3">
+        <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 ${isCompact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}>
+          <div className={`flex items-center justify-between ${isCompact ? 'mb-2' : 'mb-3'}`}>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300">
                 <ChevronRight className="w-4 h-4" />
@@ -266,30 +289,47 @@ const OperationalOverview: React.FC<OperationalOverviewProps> = ({
             </span>
           </div>
 
-          <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-            {overview.startsTomorrow.slice(0, maxItems).map(item => renderOperationalItem(item, 'start-tomorrow', 'start'))}
-            {overview.startsTomorrow.length > maxItems && (
-              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
-                +{overview.startsTomorrow.length - maxItems} registros más
+          {isCompact ? (
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {overview.startsTomorrow.length > 0
+                  ? `${overview.startsTomorrow.length} registro${overview.startsTomorrow.length !== 1 ? 's' : ''} programado${overview.startsTomorrow.length !== 1 ? 's' : ''} para mañana.`
+                  : 'Sin inicios para mañana.'}
               </p>
-            )}
-            {overview.startsTomorrow.length > 0 && (
               <button
                 type="button"
                 onClick={() => setOperationalModal('startsTomorrow')}
-                className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
                 Ver todo
               </button>
-            )}
-            {overview.startsTomorrow.length === 0 && (
-              <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para mañana.</p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+              {overview.startsTomorrow.slice(0, maxItems).map(item => renderOperationalItem(item, 'start-tomorrow', 'start'))}
+              {overview.startsTomorrow.length > maxItems && (
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
+                  +{overview.startsTomorrow.length - maxItems} registros más
+                </p>
+              )}
+              {overview.startsTomorrow.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOperationalModal('startsTomorrow')}
+                  className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Ver todo
+                </button>
+              )}
+              {overview.startsTomorrow.length === 0 && (
+                <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay inicios para mañana.</p>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between mb-3">
+        <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 ${isCompact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}>
+          <div className={`flex items-center justify-between ${isCompact ? 'mb-2' : 'mb-3'}`}>
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300">
                 <Users className="w-4 h-4" />
@@ -304,26 +344,43 @@ const OperationalOverview: React.FC<OperationalOverviewProps> = ({
             </span>
           </div>
 
-          <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-            {overview.activeNow.slice(0, maxItems).map(item => renderOperationalItem(item, 'active', 'active'))}
-            {overview.activeNow.length > maxItems && (
-              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
-                +{overview.activeNow.length - maxItems} registros más
+          {isCompact ? (
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {overview.activeNow.length > 0
+                  ? `${overview.activeNow.length} funcionario${overview.activeNow.length !== 1 ? 's' : ''} con permiso vigente hoy.`
+                  : 'Sin permisos vigentes hoy.'}
               </p>
-            )}
-            {overview.activeNow.length > 0 && (
               <button
                 type="button"
                 onClick={() => setOperationalModal('activeNow')}
-                className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
                 Ver todo
               </button>
-            )}
-            {overview.activeNow.length === 0 && (
-              <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay PA o FL vigentes hoy.</p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+              {overview.activeNow.slice(0, maxItems).map(item => renderOperationalItem(item, 'active', 'active'))}
+              {overview.activeNow.length > maxItems && (
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center py-1">
+                  +{overview.activeNow.length - maxItems} registros más
+                </p>
+              )}
+              {overview.activeNow.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOperationalModal('activeNow')}
+                  className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Ver todo
+                </button>
+              )}
+              {overview.activeNow.length === 0 && (
+                <p className="text-sm text-slate-400 dark:text-slate-500 py-6 text-center">No hay PA o FL vigentes hoy.</p>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
