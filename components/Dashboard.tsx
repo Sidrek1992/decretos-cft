@@ -74,6 +74,12 @@ const getAnalyticsDays = (record: PermitRecord): number => {
     return cantidadDias;
 };
 
+const getFLRequestedPeriodDays = (record: PermitRecord): number => {
+    const solicitadoP1 = Number(record.solicitadoP1 ?? 0);
+    const solicitadoP2 = Number(record.solicitadoP2 ?? 0);
+    return solicitadoP1 + solicitadoP2;
+};
+
 // ---------------------------------------------------------------------------
 // Tipos para el panel de detalle
 // ---------------------------------------------------------------------------
@@ -632,7 +638,16 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
         // --- Datos del período filtrado (año o año+mes) ---
         let paCount = 0, flCount = 0, totalDays = 0;
         const uniqueRuts = new Set<string>();
-        const byEmployee: Record<string, { nombre: string; rut: string; diasPA: number; diasFL: number; totalDias: number; registros: number }> = {};
+        const byEmployee: Record<string, {
+            nombre: string;
+            rut: string;
+            diasPA: number;
+            diasFL: number;
+            diasFLTop: number;
+            totalDias: number;
+            totalDiasTop: number;
+            registros: number;
+        }> = {};
 
         // Último registro por RUT por tipo → para saldo
         const lastByRutPA: Record<string, PermitRecord> = {};
@@ -650,6 +665,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
         // Contar sobre datos filtrados
         filtered.forEach(r => {
             const days = getAnalyticsDays(r);
+            const topDays = r.solicitudType === 'FL' ? getFLRequestedPeriodDays(r) : days;
             if (r.solicitudType === 'PA') paCount++;
             else if (r.solicitudType === 'FL') flCount++;
             else return;
@@ -657,11 +673,22 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
             uniqueRuts.add(r.rut);
 
             if (!byEmployee[r.rut]) {
-                byEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, diasPA: 0, diasFL: 0, totalDias: 0, registros: 0 };
+                byEmployee[r.rut] = {
+                    nombre: r.funcionario,
+                    rut: r.rut,
+                    diasPA: 0,
+                    diasFL: 0,
+                    diasFLTop: 0,
+                    totalDias: 0,
+                    totalDiasTop: 0,
+                    registros: 0
+                };
             }
             if (r.solicitudType === 'PA') byEmployee[r.rut].diasPA += days;
             else if (r.solicitudType === 'FL') byEmployee[r.rut].diasFL += days;
             byEmployee[r.rut].totalDias += days;
+            byEmployee[r.rut].totalDiasTop += topDays;
+            if (r.solicitudType === 'FL') byEmployee[r.rut].diasFLTop += topDays;
             byEmployee[r.rut].registros++;
         });
 
@@ -824,16 +851,16 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
     const { topFuncionarios, maxDias } = useMemo(() => {
         const filtered = allFuncionarios.filter(emp => {
             if (topFilter === 'PA') return emp.diasPA > 0;
-            if (topFilter === 'FL') return emp.diasFL > 0;
+            if (topFilter === 'FL') return emp.diasFLTop > 0;
             return true;
         }).sort((a, b) => {
             if (topFilter === 'PA') return b.diasPA - a.diasPA;
-            if (topFilter === 'FL') return b.diasFL - a.diasFL;
-            return b.totalDias - a.totalDias;
+            if (topFilter === 'FL') return b.diasFLTop - a.diasFLTop;
+            return b.totalDiasTop - a.totalDiasTop;
         }).slice(0, 6);
 
         const max = filtered.length > 0
-            ? Math.max(...filtered.map(e => topFilter === 'PA' ? e.diasPA : topFilter === 'FL' ? e.diasFL : e.totalDias))
+            ? Math.max(...filtered.map(e => topFilter === 'PA' ? e.diasPA : topFilter === 'FL' ? e.diasFLTop : e.totalDiasTop))
             : 1;
 
         return { topFuncionarios: filtered, maxDias: max };
@@ -1236,7 +1263,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
 
                     <div className="space-y-2.5">
                         {topFuncionarios.map((emp, i) => {
-                            const diasMostrar = topFilter === 'PA' ? emp.diasPA : topFilter === 'FL' ? emp.diasFL : emp.totalDias;
+                            const diasMostrar = topFilter === 'PA' ? emp.diasPA : topFilter === 'FL' ? emp.diasFLTop : emp.totalDiasTop;
                             const barPercent = maxDias > 0 ? (diasMostrar / maxDias) * 100 : 0;
                             const barColor = topFilter === 'PA' ? COLORS.PA : topFilter === 'FL' ? COLORS.FL : `linear-gradient(90deg, ${COLORS.PA}, ${COLORS.FL})`;
                             const barStyle = topFilter === 'todos'
@@ -1262,7 +1289,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                                             </div>
                                             <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{emp.nombre}</p>
                                             <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 text-center">{emp.diasPA}</p>
-                                            <p className="text-sm font-black text-amber-600 dark:text-amber-400 text-center">{emp.diasFL}</p>
+                                            <p className="text-sm font-black text-amber-600 dark:text-amber-400 text-center">{emp.diasFLTop}</p>
                                             <p className={`text-sm font-black text-center ${saldoColor}`}>{saldoLabel}</p>
                                         </div>
                                     ) : (

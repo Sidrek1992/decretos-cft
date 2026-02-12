@@ -70,12 +70,17 @@ const PermitTable: React.FC<PermitTableProps> = ({
   const filtered = useMemo(() => {
     const normalizedTerm = normalizeSearchText(search);
     const normalizedRutTerm = normalizeRutForSearch(search);
+    const hasSearchTerm = normalizedTerm.length > 0;
+    const hasRutSearchTerm = normalizedRutTerm.length > 0;
 
     return data.filter(r => {
-      const matchesSearch =
+      const matchesTextSearch =
         normalizeSearchText(r.funcionario).includes(normalizedTerm) ||
         normalizeSearchText(r.acto).includes(normalizedTerm) ||
-        normalizeRutForSearch(r.rut).includes(normalizedRutTerm);
+        normalizeSearchText(r.decreto).includes(normalizedTerm);
+      const matchesRutSearch =
+        hasRutSearchTerm && normalizeRutForSearch(r.rut).includes(normalizedRutTerm);
+      const matchesSearch = !hasSearchTerm || matchesTextSearch || matchesRutSearch;
       const matchesTab = activeTab === 'ALL' || r.solicitudType === activeTab;
 
       let matchesAdvanced = true;
