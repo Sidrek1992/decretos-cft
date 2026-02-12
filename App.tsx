@@ -692,48 +692,10 @@ const AppContent: React.FC = () => {
               >
                 {syncError ? <AlertCircle className="w-5 h-5" /> : <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />}
               </button>
-
-              {canUndo && (
-                <button
-                  onClick={handleUndo}
-                  className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
-                  title="Deshacer última acción"
-                >
-                  <Undo2 className="w-5 h-5" />
-                </button>
-              )}
             </div>
 
-            {/* ─── GRUPO: VISTAS (visible en lg+) ─── */}
+            {/* ─── GRUPO: PERSONAL (visible en lg+) ─── */}
             <div className="hidden lg:flex items-center gap-0.5">
-              <button
-                onClick={() => setShowDashboard(p => !p)}
-                className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 ${
-                  showDashboard
-                    ? 'text-indigo-600 dark:text-indigo-400'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}
-                title="Dashboard de estadísticas"
-              >
-                <BarChart3 className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={() => openModal('decreeBook')}
-                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
-                title="Libro de decretos"
-              >
-                <BookOpen className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={() => openModal('calendar')}
-                className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
-                title="Calendario de ausencias"
-              >
-                <CalendarDays className="w-5 h-5" />
-              </button>
-
               <button
                 onClick={() => openModal('employeeList')}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
@@ -744,8 +706,8 @@ const AppContent: React.FC = () => {
               </button>
             </div>
 
-            {/* ─── GRUPO: EXPORTAR (visible en xl+) ─── */}
-            <div className="hidden xl:flex items-center gap-0.5">
+            {/* ─── GRUPO: EXPORTAR (visible en lg+) ─── */}
+            <div className="hidden lg:flex items-center gap-0.5">
               <button
                 onClick={handleExportData}
                 className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
@@ -879,7 +841,71 @@ const AppContent: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8 sm:space-y-10 page-fade-in">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 page-fade-in">
+        <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 xl:gap-8">
+          {/* Panel vertical izquierdo (desktop) */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800 dark:to-indigo-900/20">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Navegación</p>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-wide mt-0.5">Panel principal</h3>
+                </div>
+
+                <div className="p-2 space-y-1.5">
+                  <button
+                    onClick={() => setShowDashboard(p => !p)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${showDashboard
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      }`}
+                  >
+                    <div className={`p-1.5 rounded-lg ${showDashboard ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <BarChart3 className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-wider">Dashboard</p>
+                      <p className="text-[10px] opacity-70">Estadísticas y analítica</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => openModal('decreeBook')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${modals.decreeBook
+                      ? 'bg-amber-50 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200 dark:ring-amber-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      }`}
+                  >
+                    <div className={`p-1.5 rounded-lg ${modals.decreeBook ? 'bg-amber-100 dark:bg-amber-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-wider">Libro de decretos</p>
+                      <p className="text-[10px] opacity-70">Historial institucional</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => openModal('calendar')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${modals.calendar
+                      ? 'bg-sky-50 dark:bg-sky-900/25 text-sky-700 dark:text-sky-300 ring-1 ring-sky-200 dark:ring-sky-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      }`}
+                  >
+                    <div className={`p-1.5 rounded-lg ${modals.calendar ? 'bg-sky-100 dark:bg-sky-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <CalendarDays className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-wider">Calendario</p>
+                      <p className="text-[10px] opacity-70">Ausencias y programación</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div className="space-y-8 sm:space-y-10 min-w-0">
         {/* Welcome Banner */}
         <WelcomeBanner
           userName={welcomeUserName}
@@ -1016,6 +1042,8 @@ const AppContent: React.FC = () => {
               canDelete={permissions.canDeleteDecree}
             />
           </section>
+        </div>
+          </div>
         </div>
       </main>
 
