@@ -143,12 +143,14 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).getTime();
     const normalizedSearch = normalizeSearchText(search);
     const normalizedRutSearch = normalizeRutForSearch(search);
+    const hasSearchTerm = normalizedSearch.length > 0;
+    const hasRutSearchTerm = normalizedRutSearch.length > 0;
 
     return employees
       .filter(e => {
-        const matchesSearch =
-          normalizeSearchText(e.nombre).includes(normalizedSearch) ||
-          normalizeRutForSearch(e.rut).includes(normalizedRutSearch);
+        const matchesName = normalizeSearchText(e.nombre).includes(normalizedSearch);
+        const matchesRut = hasRutSearchTerm && normalizeRutForSearch(e.rut).includes(normalizedRutSearch);
+        const matchesSearch = !hasSearchTerm || matchesName || matchesRut;
 
         if (!matchesSearch) return false;
 
