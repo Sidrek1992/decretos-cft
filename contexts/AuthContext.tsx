@@ -98,11 +98,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         try {
-            const { data, error } = await supabase
+            // timeout de 5 segundos para la carga del perfil remoto
+            const profilePromise = supabase
                 .from('profiles')
                 .select('email, role, created_at')
                 .eq('email', normalizedEmail)
                 .maybeSingle();
+
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Timeout loading profile')), 5000)
+            );
+
+            const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
 
             if (!error && data?.role) {
                 const dbRole = String(data.role).toLowerCase();
@@ -115,10 +122,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     role: normalizedRole,
                     created_at: String(data.created_at || new Date().toISOString())
                 });
+                console.log('Auth: Perfil cargado exitosamente desde DB');
                 return;
             }
-        } catch {
-            // Si falla la tabla remota, mantenemos fallback local
+            if (error) console.error('Auth: Error en consulta de perfil:', error);
+        } catch (err) {
+            console.warn('Auth: No se pudo cargar perfil remoto (usando fallback local):', err);
         }
 
         setProfile(null);
@@ -127,48 +136,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     useEffect(() => {
         // Obtener sesión actual
         const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
-                await supabase.auth.signOut();
-                setSession(null);
-                setUser(null);
+            console.log('Auth: Iniciando verificación de sesión...');
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    console.error('Auth: Error obteniendo sesión:', error);
+                    setLoading(false);
+                    return;
+                }
+
+                if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
+                    console.warn('Auth: Usuario bloqueado:', session.user.email);
+                    await supabase.auth.signOut();
+                    setSession(null);
+                    setUser(null);
+                    setLoading(false);
+                    return;
+                }
+
+                setSession(session);
+                setUser(session?.user ?? null);
+
+                if (session?.user) {
+                    console.log('Auth: Sesión encontrada para', session.user.email, '- Cargando perfil...');
+                    await loadProfile(session.user.id, session.user.email);
+                } else {
+                    console.log('Auth: No se encontró sesión activa');
+                }
+            } catch (err) {
+                console.error('Auth: Error crítico en getSession:', err);
+            } finally {
                 setLoading(false);
-                return;
+                console.log('Auth: Verificación de sesión finalizada.');
             }
-            setSession(session);
-            setUser(session?.user ?? null);
-
-            if (session?.user) {
-                await loadProfile(session.user.id, session.user.email);
-            }
-
-            setLoading(false);
         };
 
         getSession();
 
         // Escuchar cambios de autenticación
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
-                if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
-                    await supabase.auth.signOut();
-                    setSession(null);
-                    setUser(null);
-                    setProfile(null);
+            async (event, session) => {
+                console.log('Auth: Cambio de estado detectado:', event);
+                try {
+                    if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
+                        await supabase.auth.signOut();
+                        setSession(null);
+                        setUser(null);
+                        setProfile(null);
+                        setLoading(false);
+                        return;
+                    }
+
+                    setSession(session);
+                    setUser(session?.user ?? null);
+
+                    if (session?.user) {
+                        await loadProfile(session.user.id, session.user.email);
+                    } else {
+                        setProfile(null);
+                        if (event === 'SIGNED_OUT') {
+                            clearWelcomeBannerDismissals();
+                        }
+                    }
+                } catch (err) {
+                    console.error('Auth: Error en handler de onAuthStateChange:', err);
+                } finally {
                     setLoading(false);
-                    return;
                 }
-                setSession(session);
-                setUser(session?.user ?? null);
-
-                if (session?.user) {
-                    await loadProfile(session.user.id, session.user.email);
-                } else {
-                    setProfile(null);
-                    clearWelcomeBannerDismissals();
-                }
-
-                setLoading(false);
             }
         );
 
