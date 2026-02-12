@@ -832,7 +832,7 @@ const AppContent: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:pl-0 lg:pr-6 py-8 sm:py-10 page-fade-in">
         <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 xl:gap-8">
           {/* Panel vertical izquierdo (desktop) */}
-          <aside className="hidden lg:block lg:-ml-4">
+          <aside className="hidden lg:block lg:ml-[calc((100vw-100%)/-2+3px)]">
             <div className="sticky top-24">
               <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800 dark:to-indigo-900/20">
