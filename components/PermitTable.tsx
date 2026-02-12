@@ -411,61 +411,61 @@ const PermitTable: React.FC<PermitTableProps> = ({
                 </th>
                 <th
                   onClick={() => handleSort('acto')}
-                  className="pr-2 sm:pr-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none"
+                  className="pr-1 sm:pr-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none"
                 >
-                  <div className="flex items-center gap-2">Decreto <SortIcon field="acto" /></div>
+                  <div className="flex items-center gap-1.5">Decreto <SortIcon field="acto" /></div>
                 </th>
                 <th
                   onClick={() => handleSort('funcionario')}
-                  className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none"
+                  className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none"
                 >
-                  <div className="flex items-center gap-2">Funcionario <SortIcon field="funcionario" /></div>
+                  <div className="flex items-center gap-1.5">Funcionario <SortIcon field="funcionario" /></div>
                 </th>
                 <th
                   onClick={() => handleSort('solicitudType')}
-                  className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden sm:table-cell"
+                  className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden sm:table-cell"
                 >
-                  <div className="flex items-center gap-2">Tipo <SortIcon field="solicitudType" /></div>
+                  <div className="flex items-center gap-1.5">Tipo <SortIcon field="solicitudType" /></div>
                 </th>
                 {(activeTab === 'FL' || activeTab === 'ALL') && (
                   <th
-                    className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 hidden md:table-cell"
+                    className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 hidden md:table-cell"
                   >
-                    <div className="flex items-center gap-2">Período</div>
+                    <div className="flex items-center gap-1.5">Período</div>
                   </th>
                 )}
                 <th
                   onClick={() => handleSort('cantidadDias')}
-                  className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none"
+                  className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none"
                 >
-                  <div className="flex items-center gap-2">Días <SortIcon field="cantidadDias" /></div>
+                  <div className="flex items-center gap-1.5">Días <SortIcon field="cantidadDias" /></div>
                 </th>
                 <th
                   onClick={() => handleSort('saldo')}
-                  className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden sm:table-cell"
+                  className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden sm:table-cell"
                 >
-                  <div className="flex items-center gap-2">Saldo <SortIcon field="saldo" /></div>
+                  <div className="flex items-center gap-1.5">Saldo <SortIcon field="saldo" /></div>
                 </th>
                 <th
                   onClick={() => handleSort('fechaInicio')}
-                  className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden sm:table-cell"
+                  className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden sm:table-cell"
                 >
-                  <div className="flex items-center gap-2">Inicio <SortIcon field="fechaInicio" /></div>
+                  <div className="flex items-center gap-1.5">Inicio <SortIcon field="fechaInicio" /></div>
                 </th>
                 {(activeTab === 'FL' || activeTab === 'ALL') && (
                   <th
-                    className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 hidden lg:table-cell"
+                    className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 hidden lg:table-cell"
                   >
-                    <div className="flex items-center gap-2">Término</div>
+                    <div className="flex items-center gap-1.5">Término</div>
                   </th>
                 )}
                 <th
                   onClick={() => handleSort('fechaDecreto')}
-                  className="px-2 sm:px-3 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden lg:table-cell"
+                  className="px-1.5 sm:px-2 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-white dark:hover:bg-slate-800 transition-colors group select-none hidden lg:table-cell"
                 >
-                  <div className="flex items-center gap-2">Emisión <SortIcon field="fechaDecreto" /></div>
+                  <div className="flex items-center gap-1.5">Emisión <SortIcon field="fechaDecreto" /></div>
                 </th>
-                <th className="pl-2 sm:pl-3 pr-4 sm:pr-8 py-4 sm:py-6 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] text-slate-400 dark:text-slate-500 text-right">
+                <th className="pl-1.5 sm:pl-2 pr-3 sm:pr-4 py-3 sm:py-4 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 text-right">
                   Acciones
                 </th>
               </tr>
@@ -491,30 +491,30 @@ const PermitTable: React.FC<PermitTableProps> = ({
                         )}
                       </button>
                     </td>
-                    <td className="pr-2 sm:pr-3 py-4 sm:py-5">
+                    <td className="pr-1 sm:pr-2 py-3 sm:py-4">
                       <div className="flex flex-col">
-                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-sm sm:text-[13px] tracking-tight">{record.acto}</span>
-                        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter truncate max-w-[100px]">{record.materia}</span>
+                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs sm:text-[12px] tracking-tight">{record.acto}</span>
+                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter truncate max-w-[80px]">{record.materia}</span>
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 sm:py-5">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 dark:bg-slate-700 items-center justify-center text-slate-300 dark:text-slate-500 group-hover/row:bg-white dark:group-hover/row:bg-slate-600 group-hover/row:shadow-sm transition-all">
-                          <UserCircle size={20} className="sm:hidden" />
-                          <UserCircle size={22} className="hidden sm:block" />
+                    <td className="px-1.5 sm:px-2 py-3 sm:py-4">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <div className="hidden sm:flex w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 dark:bg-slate-700 items-center justify-center text-slate-300 dark:text-slate-500 group-hover/row:bg-white dark:group-hover/row:bg-slate-600 group-hover/row:shadow-sm transition-all">
+                          <UserCircle size={18} className="sm:hidden" />
+                          <UserCircle size={20} className="hidden sm:block" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <p className="text-[11px] sm:text-xs font-black text-slate-800 dark:text-white uppercase tracking-tight truncate max-w-[120px] sm:max-w-[150px] lg:max-w-xs">
+                          <p className="text-[10px] sm:text-[11px] font-black text-slate-800 dark:text-white uppercase tracking-tight truncate max-w-[100px] sm:max-w-[130px] lg:max-w-xs">
                             {record.funcionario}
                           </p>
-                          <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 font-mono tracking-tighter">
+                          <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 dark:text-slate-500 font-mono tracking-tighter">
                             {record.rut}
                           </p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
-                      <span className={`px-2 sm:px-3 py-1 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest border shadow-sm ${record.solicitudType === 'PA'
+                    <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden sm:table-cell">
+                      <span className={`px-2 py-0.5 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-wider border shadow-sm ${record.solicitudType === 'PA'
                         ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-800'
                         : 'bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-100 dark:border-amber-800'
                         }`}>
@@ -522,60 +522,56 @@ const PermitTable: React.FC<PermitTableProps> = ({
                       </span>
                     </td>
                     {(activeTab === 'FL' || activeTab === 'ALL') && (
-                      <td className="px-2 sm:px-3 py-4 sm:py-5 hidden md:table-cell">
+                      <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden md:table-cell">
                         {record.solicitudType === 'FL' ? (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-0.5">
                             {record.periodo1 && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-black tracking-wide bg-sky-50 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 border border-sky-100 dark:border-sky-800 whitespace-nowrap">
+                              <span className="px-1 py-0.5 rounded text-[7px] sm:text-[8px] font-black tracking-wide bg-sky-50 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 border border-sky-100 dark:border-sky-800 whitespace-nowrap">
                                 {record.periodo1}
                               </span>
                             )}
                             {record.periodo2 && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-black tracking-wide bg-purple-50 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800 whitespace-nowrap">
+                              <span className="px-1 py-0.5 rounded text-[7px] sm:text-[8px] font-black tracking-wide bg-purple-50 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800 whitespace-nowrap">
                                 {record.periodo2}
                               </span>
                             )}
-                            {!record.periodo1 && !record.periodo2 && (
-                              <span className="text-[10px] text-slate-400">-</span>
-                            )}
                           </div>
                         ) : (
-                          <span className="text-[10px] text-slate-400">-</span>
+                          <span className="text-[9px] text-slate-400">-</span>
                         )}
                       </td>
                     )}
-                    <td className="px-2 sm:px-3 py-4 sm:py-5">
-                      <div className="flex items-center gap-1 sm:gap-2">
-                        <span className="font-black text-slate-700 dark:text-slate-200 text-sm sm:text-[13px]">{record.cantidadDias}</span>
-                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter hidden lg:inline">DÍAS</span>
+                    <td className="px-1.5 sm:px-2 py-3 sm:py-4">
+                      <div className="flex items-center gap-1">
+                        <span className="font-black text-slate-700 dark:text-slate-200 text-xs sm:text-[12px]">{record.cantidadDias}</span>
                       </div>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
-                      <span className={`font-black text-sm sm:text-[13px] ${getSaldo(record) < 0
+                    <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden sm:table-cell">
+                      <span className={`font-black text-xs sm:text-[12px] ${getSaldo(record) < 0
                         ? 'text-red-500 dark:text-red-400'
                         : 'text-emerald-600 dark:text-emerald-400'
                         }`}>
                         {getSaldo(record).toFixed(1)}
                       </span>
                     </td>
-                    <td className="px-2 sm:px-3 py-4 sm:py-5 hidden sm:table-cell">
-                      <span className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate whitespace-nowrap">
+                    <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden sm:table-cell">
+                      <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate whitespace-nowrap">
                         {formatNumericDate(record.fechaInicio)}
                       </span>
                     </td>
                     {(activeTab === 'FL' || activeTab === 'ALL') && (
-                      <td className="px-2 sm:px-3 py-4 sm:py-5 hidden lg:table-cell">
-                        <span className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate whitespace-nowrap">
+                      <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden lg:table-cell">
+                        <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight truncate whitespace-nowrap">
                           {record.fechaTermino ? formatNumericDate(record.fechaTermino) : '-'}
                         </span>
                       </td>
                     )}
-                    <td className="px-2 sm:px-3 py-4 sm:py-5 hidden lg:table-cell">
-                      <span className="text-[11px] sm:text-xs font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-tight truncate whitespace-nowrap">
+                    <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden lg:table-cell">
+                      <span className="text-[10px] sm:text-[11px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-tight truncate whitespace-nowrap">
                         {record.fechaDecreto ? formatNumericDate(record.fechaDecreto) : '-'}
                       </span>
                     </td>
-                    <td className="pl-2 sm:pl-3 pr-4 sm:pr-8 py-4 sm:py-5 text-right">
+                    <td className="pl-1.5 sm:pl-2 pr-3 sm:pr-4 py-3 sm:py-4 text-right">
                       <div className="flex justify-end">
                         <ActionMenu
                           record={record}

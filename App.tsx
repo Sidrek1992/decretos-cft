@@ -287,13 +287,12 @@ const MobileMenu: React.FC<MobileMenuProps> = ({
                       key={itemIdx}
                       onClick={() => !item.disabled && handleAction(item.action)}
                       disabled={item.disabled}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
-                        item.disabled
-                          ? 'opacity-40 cursor-not-allowed'
-                          : item.active
-                            ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200 dark:ring-indigo-800'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.98]'
-                      }`}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${item.disabled
+                        ? 'opacity-40 cursor-not-allowed'
+                        : item.active
+                          ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200 dark:ring-indigo-800'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.98]'
+                        }`}
                     >
                       <span className={item.color}>{item.icon}</span>
                       <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.label}</span>
@@ -660,9 +659,8 @@ const AppContent: React.FC = () => {
           <div className="flex items-center gap-3">
             {/* Logo Premium con gradiente */}
             <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${
-                isSyncing ? 'logo-syncing' : 'shadow-indigo-200 dark:shadow-indigo-900/50'
-              }`}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${isSyncing ? 'logo-syncing' : 'shadow-indigo-200 dark:shadow-indigo-900/50'
+                }`}
             >
               <Cloud className="text-white w-5 h-5" />
             </div>
@@ -681,13 +679,12 @@ const AppContent: React.FC = () => {
               <button
                 onClick={() => fetchFromCloud()}
                 disabled={isSyncing}
-                className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 ${
-                  isSyncing
-                    ? 'text-slate-300 dark:text-slate-600'
-                    : syncError
-                      ? 'text-red-500 dark:text-red-400'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                }`}
+                className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 ${isSyncing
+                  ? 'text-slate-300 dark:text-slate-600'
+                  : syncError
+                    ? 'text-red-500 dark:text-red-400'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}
                 title={typeof syncError === 'string' ? syncError : 'Sincronizar datos'}
               >
                 {syncError ? <AlertCircle className="w-5 h-5" /> : <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />}
@@ -742,9 +739,8 @@ const AppContent: React.FC = () => {
             <div className="hidden md:flex items-center gap-2">
               {/* Badge del rol - Premium style */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm">
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  role === 'admin' ? 'bg-purple-500' : role === 'editor' ? 'bg-amber-500' : 'bg-sky-500'
-                }`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${role === 'admin' ? 'bg-purple-500' : role === 'editor' ? 'bg-amber-500' : 'bg-sky-500'
+                  }`} />
                 <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 tracking-wide">
                   {roleLabel}
                 </span>
@@ -829,15 +825,15 @@ const AppContent: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:pl-0 lg:pr-6 py-8 sm:py-10 page-fade-in">
-        <div className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-6 xl:gap-8">
+      <main className="w-full lg:max-w-full lg:px-2 px-4 sm:px-6 pt-8 sm:pt-10 pb-0 page-fade-in">
+        <div className="lg:grid lg:grid-cols-[170px_minmax(0,1fr)] lg:gap-4">
           {/* Panel vertical izquierdo (desktop) */}
-          <aside className="hidden lg:block lg:ml-[calc((100vw-100%)/-2+12px)]">
+          <aside className="hidden lg:block w-[170px] shrink-0">
             <div className="sticky top-24">
-              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm shadow-sm overflow-hidden">
-                <div className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800 dark:to-indigo-900/20">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Navegación</p>
-                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-wide mt-0.5">Panel principal</h3>
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Navegación</p>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 mt-1">Panel principal</h3>
                 </div>
 
                 <div className="p-1.5 space-y-1.5">
@@ -845,7 +841,7 @@ const AppContent: React.FC = () => {
                     onClick={() => openModal('employeeList')}
                     className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.employeeList
                       ? 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800'
-                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${modals.employeeList ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
@@ -853,7 +849,7 @@ const AppContent: React.FC = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Gestión de personal</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Funcionarios registrados</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Funcionarios registrados</p>
                     </div>
                     <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-black bg-white/80 dark:bg-slate-700/80 border border-slate-200 dark:border-slate-600">
                       {employees.length}
@@ -864,7 +860,7 @@ const AppContent: React.FC = () => {
                     onClick={() => setShowDashboard(p => !p)}
                     className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${showDashboard
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800'
-                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${showDashboard ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
@@ -872,7 +868,7 @@ const AppContent: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Dashboard</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Estadísticas y analítica</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Estadísticas y analítica</p>
                     </div>
                   </button>
 
@@ -880,7 +876,7 @@ const AppContent: React.FC = () => {
                     onClick={() => openModal('decreeBook')}
                     className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.decreeBook
                       ? 'bg-amber-50 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200 dark:ring-amber-800'
-                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${modals.decreeBook ? 'bg-amber-100 dark:bg-amber-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
@@ -888,7 +884,7 @@ const AppContent: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Libro de decretos</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Historial institucional</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Historial institucional</p>
                     </div>
                   </button>
 
@@ -896,7 +892,7 @@ const AppContent: React.FC = () => {
                     onClick={() => openModal('calendar')}
                     className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.calendar
                       ? 'bg-sky-50 dark:bg-sky-900/25 text-sky-700 dark:text-sky-300 ring-1 ring-sky-200 dark:ring-sky-800'
-                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${modals.calendar ? 'bg-sky-100 dark:bg-sky-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
@@ -904,7 +900,7 @@ const AppContent: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Calendario</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Ausencias y programación</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Ausencias y programación</p>
                     </div>
                   </button>
                 </div>
@@ -913,143 +909,143 @@ const AppContent: React.FC = () => {
           </aside>
 
           <div className="space-y-8 sm:space-y-10 min-w-0">
-        {/* Welcome Banner */}
-        <WelcomeBanner
-          userName={welcomeUserName}
-          totalRecords={records.length}
-          totalEmployees={employees.length}
-          criticalAlerts={notifications_criticalCount}
-          onClickDecrees={handleViewDecreesFromWelcome}
-          onClickEmployees={handleViewEmployeesFromWelcome}
-          onClickUrgent={handleViewUrgentFromWelcome}
-          isSyncing={isSyncing}
-          isOnline={isOnline}
-          lastSync={lastSync}
-          syncStatusDotClass={syncStatusDotClass}
-        />
-
-        {!shouldHideSummaryCards && (
-          <>
-            <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
-            <OperationalOverview records={records} variant="compact" />
-          </>
-        )}
-
-        {/* Dashboard condicional (lazy loaded) */}
-        {showDashboard && (
-          <Suspense fallback={
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 animate-pulse">
-              <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded-xl" />
-            </div>
-          }>
-            <Dashboard
-              records={records}
-              employees={employees}
+            {/* Welcome Banner */}
+            <WelcomeBanner
+              userName={welcomeUserName}
+              totalRecords={records.length}
+              totalEmployees={employees.length}
+              criticalAlerts={notifications_criticalCount}
+              onClickDecrees={handleViewDecreesFromWelcome}
+              onClickEmployees={handleViewEmployeesFromWelcome}
+              onClickUrgent={handleViewUrgentFromWelcome}
+              isSyncing={isSyncing}
+              isOnline={isOnline}
+              lastSync={lastSync}
+              syncStatusDotClass={syncStatusDotClass}
             />
-          </Suspense>
-        )}
 
-        <div className="space-y-10 sm:space-y-12">
-          {/* Formulario - Solo para administradores */}
-          {permissions.canCreateDecree && (
-            <section ref={formRef}>
-              <PermitForm
-                onSubmit={handleSubmit}
-                editingRecord={editingRecord}
-                onCancelEdit={() => setEditingRecord(null)}
-                nextCorrelatives={nextCorrelatives}
-                employees={employees}
-                records={records}
-                requestedSolicitudType={requestedSolicitudType}
-                onRequestedSolicitudTypeHandled={() => setRequestedSolicitudType(null)}
-              />
-            </section>
-          )}
+            {!shouldHideSummaryCards && (
+              <>
+                <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
+                <OperationalOverview records={records} variant="compact" />
+              </>
+            )}
 
-          {/* Mensaje para lectores */}
-          {!permissions.canCreateDecree && (
-            <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3">
-                <div className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
-                  {roleLabel}
+            {/* Dashboard condicional (lazy loaded) */}
+            {showDashboard && (
+              <Suspense fallback={
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 animate-pulse">
+                  <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded-xl" />
                 </div>
-                <p className="text-sm text-sky-700 dark:text-sky-300">
-                  Tu rol es de <strong>lectura</strong>. Puedes consultar los registros y generar documentos PDF, pero no crear ni modificar decretos.
-                </p>
-              </div>
-            </div>
-          )}
+              }>
+                <Dashboard
+                  records={records}
+                  employees={employees}
+                />
+              </Suspense>
+            )}
 
-          {/* Tabla */}
-          <section className="space-y-6 sm:space-y-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/50">
-                  <LayoutDashboard className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                    Registro de Decretos
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                      Historial Institucional
-                    </span>
-                    {lastSync && !isSyncing && (
-                      <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 rounded-full text-[8px] font-black uppercase tracking-tighter">
-                        <CheckCircle className="w-2.5 h-2.5" /> Sincronizado
-                      </span>
-                    )}
+            <div className="space-y-10 sm:space-y-12">
+              {/* Formulario - Solo para administradores */}
+              {permissions.canCreateDecree && (
+                <section ref={formRef}>
+                  <PermitForm
+                    onSubmit={handleSubmit}
+                    editingRecord={editingRecord}
+                    onCancelEdit={() => setEditingRecord(null)}
+                    nextCorrelatives={nextCorrelatives}
+                    employees={employees}
+                    records={records}
+                    requestedSolicitudType={requestedSolicitudType}
+                    onRequestedSolicitudTypeHandled={() => setRequestedSolicitudType(null)}
+                  />
+                </section>
+              )}
+
+              {/* Mensaje para lectores */}
+              {!permissions.canCreateDecree && (
+                <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-6">
+                  <div className="flex items-center gap-3">
+                    <div className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
+                      {roleLabel}
+                    </div>
+                    <p className="text-sm text-sky-700 dark:text-sky-300">
+                      Tu rol es de <strong>lectura</strong>. Puedes consultar los registros y generar documentos PDF, pero no crear ni modificar decretos.
+                    </p>
                   </div>
-                  <div className="mt-1 hidden sm:flex items-center gap-2">
-                    {(['PA', 'FL'] as const).map((module) => (
+                </div>
+              )}
+
+              {/* Tabla */}
+              <section className="space-y-6 sm:space-y-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/50">
+                      <LayoutDashboard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                        Registro de Decretos
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                          Historial Institucional
+                        </span>
+                        {lastSync && !isSyncing && (
+                          <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 rounded-full text-[8px] font-black uppercase tracking-tighter">
+                            <CheckCircle className="w-2.5 h-2.5" /> Sincronizado
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 hidden sm:flex items-center gap-2">
+                        {(['PA', 'FL'] as const).map((module) => (
+                          <button
+                            key={module}
+                            onClick={() => fetchModuleFromCloud(module)}
+                            className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-colors ${moduleSync[module].status === 'error'
+                              ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+                              : moduleSync[module].status === 'syncing'
+                                ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-800'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                              }`}
+                            title={moduleSync[module].lastError || `Reintentar sincronización ${module}`}
+                          >
+                            {module} {moduleSync[module].status === 'syncing' ? '...' : 'sync'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabs de filtro */}
+                  <div className="flex bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur p-1.5 rounded-2xl gap-1 border border-slate-200/50 dark:border-slate-700 shadow-inner w-full sm:w-auto">
+                    {(['ALL', 'PA', 'FL'] as const).map(tab => (
                       <button
-                        key={module}
-                        onClick={() => fetchModuleFromCloud(module)}
-                        className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-colors ${moduleSync[module].status === 'error'
-                          ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
-                          : moduleSync[module].status === 'syncing'
-                            ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-800'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black tracking-wider sm:tracking-widest transition-all duration-300 uppercase ${activeTab === tab
+                          ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md ring-1 ring-slate-200 dark:ring-slate-600'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                           }`}
-                        title={moduleSync[module].lastError || `Reintentar sincronización ${module}`}
                       >
-                        {module} {moduleSync[module].status === 'syncing' ? '...' : 'sync'}
+                        {tab === 'ALL' ? 'Todos' : tab === 'PA' ? 'Permisos' : 'Feriados'}
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              {/* Tabs de filtro */}
-              <div className="flex bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur p-1.5 rounded-2xl gap-1 border border-slate-200/50 dark:border-slate-700 shadow-inner w-full sm:w-auto">
-                {(['ALL', 'PA', 'FL'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`flex-1 sm:flex-none px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black tracking-wider sm:tracking-widest transition-all duration-300 uppercase ${activeTab === tab
-                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md ring-1 ring-slate-200 dark:ring-slate-600'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                      }`}
-                  >
-                    {tab === 'ALL' ? 'Todos' : tab === 'PA' ? 'Permisos' : 'Feriados'}
-                  </button>
-                ))}
-              </div>
+                <PermitTable
+                  data={records}
+                  activeTab={activeTab}
+                  onDelete={handleDelete}
+                  onEdit={setEditingRecord}
+                  searchTerm={searchFilter}
+                  onSearchTermChange={setSearchFilter}
+                  canEdit={permissions.canEditDecree}
+                  canDelete={permissions.canDeleteDecree}
+                />
+              </section>
             </div>
-
-            <PermitTable
-              data={records}
-              activeTab={activeTab}
-              onDelete={handleDelete}
-              onEdit={setEditingRecord}
-              searchTerm={searchFilter}
-              onSearchTermChange={setSearchFilter}
-              canEdit={permissions.canEditDecree}
-              canDelete={permissions.canDeleteDecree}
-            />
-          </section>
-        </div>
           </div>
         </div>
       </main>
@@ -1160,7 +1156,7 @@ const AppContent: React.FC = () => {
       />
 
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 border-t border-slate-200 dark:border-slate-700 mt-16 sm:mt-20">
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-6 border-t border-slate-200 dark:border-slate-700 mt-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 sm:gap-8 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
           <div className="flex items-center gap-3">
             <Cloud className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
