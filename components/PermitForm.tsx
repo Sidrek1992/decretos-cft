@@ -45,6 +45,8 @@ interface PermitFormProps {
   records: PermitRecord[];
   requestedSolicitudType?: SolicitudType | null;
   onRequestedSolicitudTypeHandled?: () => void;
+  initialEmployee?: Employee | null;
+  onInitialEmployeeHandled?: () => void;
 }
 
 interface FormErrors {
@@ -63,7 +65,9 @@ const PermitForm: React.FC<PermitFormProps> = ({
   employees,
   records,
   requestedSolicitudType,
-  onRequestedSolicitudTypeHandled
+  onRequestedSolicitudTypeHandled,
+  initialEmployee,
+  onInitialEmployeeHandled
 }) => {
   const currentYear = new Date().getFullYear();
   const defaultPeriodo1 = `${currentYear - 1}-${currentYear}`;
@@ -141,6 +145,14 @@ const PermitForm: React.FC<PermitFormProps> = ({
       }));
     }
   }, [formData.solicitudType, nextCorrelatives, editingRecord]);
+
+  // Manejar empleado inicial (desde Personal -> Iniciar Decreto)
+  useEffect(() => {
+    if (initialEmployee && !editingRecord) {
+      selectEmployee(initialEmployee);
+      onInitialEmployeeHandled?.();
+    }
+  }, [initialEmployee, editingRecord, onInitialEmployeeHandled]);
 
   useEffect(() => {
     if (!requestedSolicitudType) return;

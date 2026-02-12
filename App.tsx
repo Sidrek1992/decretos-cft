@@ -376,6 +376,7 @@ const AppContent: React.FC = () => {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [selectedEmployeeForForm, setSelectedEmployeeForForm] = useState<Employee | null>(null);
   const [requestedSolicitudType, setRequestedSolicitudType] = useState<SolicitudType | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -531,7 +532,11 @@ const AppContent: React.FC = () => {
 
   const handleQuickDecree = (employee: Employee) => {
     // Preparar el formulario con el empleado seleccionado
-    formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setSelectedEmployeeForForm(employee);
+    setCurrentView('decretos'); // El formulario está en la vista de decretos
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
     toast.info('Nuevo decreto', `Preparando decreto para ${employee.nombre}`);
   };
 
@@ -1013,6 +1018,8 @@ const AppContent: React.FC = () => {
                       records={records}
                       requestedSolicitudType={requestedSolicitudType}
                       onRequestedSolicitudTypeHandled={() => setRequestedSolicitudType(null)}
+                      initialEmployee={selectedEmployeeForForm}
+                      onInitialEmployeeHandled={() => setSelectedEmployeeForForm(null)}
                     />
                   </section>
                 )}

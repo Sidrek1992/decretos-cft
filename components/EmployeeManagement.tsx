@@ -370,7 +370,7 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                         <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                             placeholder="Buscar por nombre o RUT..."
-                            className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                            className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 text-sm font-black text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-sm"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
@@ -380,9 +380,9 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                         <select
                             value={dateFilter}
                             onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-                            className="bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer outline-none hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/50 rounded-2xl px-4 py-3 text-xs font-black text-slate-600 dark:text-slate-300 cursor-pointer outline-none hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
                         >
-                            <option value="all">📅 Todos los periodos</option>
+                            <option value="all">Todos los periodos</option>
                             <option value="thisMonth">Este Mes</option>
                             <option value="thisYear">Este Año</option>
                             <option value="noRecent">Sin Actividad (+3m)</option>
@@ -395,7 +395,7 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                                 setSortField(field as SortField);
                                 setSortOrder(order as SortOrder);
                             }}
-                            className="bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer outline-none hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/50 rounded-2xl px-4 py-3 text-xs font-black text-slate-600 dark:text-slate-300 cursor-pointer outline-none hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
                         >
                             <option value="nombre-asc">Nombre (A-Z)</option>
                             <option value="totalDecrees-desc">Más Decretos</option>
