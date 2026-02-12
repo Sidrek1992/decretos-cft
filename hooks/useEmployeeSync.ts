@@ -3,6 +3,7 @@ import { Employee } from '../types';
 import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
 import { localBackup } from '../services/localBackup';
+import { publishSyncEvent, subscribeToSyncEvents } from '../services/realtimeSync';
 
 const employeeLogger = logger.create('EmployeeSync');
 
@@ -21,7 +22,8 @@ interface UseEmployeeSyncReturn {
 
 export const useEmployeeSync = (
     onSyncSuccess?: () => void,
-    onSyncError?: (error: string) => void
+    onSyncError?: (error: string) => void,
+    actorEmail?: string
 ): UseEmployeeSyncReturn => {
     const [employees, setEmployees] = useState<Employee[]>([]);
 
@@ -30,6 +32,7 @@ export const useEmployeeSync = (
     const [lastSync, setLastSync] = useState<Date | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
+    const realtimeRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const hasLoadedRef = useRef(false);
 
     // Cargar empleados desde el Sheet al iniciar
@@ -40,6 +43,9 @@ export const useEmployeeSync = (
         return () => {
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
+            }
+            if (realtimeRefreshTimeoutRef.current) {
+                clearTimeout(realtimeRefreshTimeoutRef.current);
             }
         };
     }, []);
@@ -146,6 +152,29 @@ export const useEmployeeSync = (
     }, [onSyncSuccess, onSyncError]);
 
     useEffect(() => {
+        const unsubscribe = subscribeToSyncEvents({
+            scope: 'employees',
+            channelKey: 'employee-sync',
+            onEvent: () => {
+                if (realtimeRefreshTimeoutRef.current) return;
+
+                realtimeRefreshTimeoutRef.current = setTimeout(() => {
+                    realtimeRefreshTimeoutRef.current = null;
+                    void fetchEmployeesFromCloud();
+                }, 900);
+            }
+        });
+
+        return () => {
+            if (realtimeRefreshTimeoutRef.current) {
+                clearTimeout(realtimeRefreshTimeoutRef.current);
+                realtimeRefreshTimeoutRef.current = null;
+            }
+            unsubscribe();
+        };
+    }, [fetchEmployeesFromCloud]);
+
+    useEffect(() => {
         const persistBackup = async () => {
             try {
                 if (!hasLoadedRef.current) return;
@@ -221,6 +250,20 @@ export const useEmployeeSync = (
 
             if (result.success) {
                 setLastSync(new Date());
+
+                try {
+                    await publishSyncEvent({
+                        scope: 'employees',
+                        action: 'sync_to_cloud',
+                        actorEmail,
+                        metadata: {
+                            total: dataToSync.length
+                        }
+                    });
+                } catch (realtimeError) {
+                    employeeLogger.warn('No se pudo publicar evento realtime de funcionarios:', realtimeError);
+                }
+
                 onSyncSuccess?.();
                 return true;
             } else {
@@ -234,7 +277,7 @@ export const useEmployeeSync = (
         } finally {
             setIsSyncing(false);
         }
-    }, [onSyncSuccess, onSyncError]);
+    }, [onSyncSuccess, onSyncError, actorEmail]);
 
     const addEmployee = useCallback((employee: Employee) => {
         setEmployees(prev => {

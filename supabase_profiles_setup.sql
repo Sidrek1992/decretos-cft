@@ -8,6 +8,9 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.profiles to authenticated;
+
 alter table public.profiles enable row level security;
 
 -- Cada usuario autenticado puede leer perfiles (necesario para resolver roles)
@@ -34,32 +37,44 @@ to authenticated
 using (lower(auth.jwt() ->> 'email') = lower(email))
 with check (lower(auth.jwt() ->> 'email') = lower(email));
 
+create or replace function public.authenticated_email()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select lower(u.email)
+  from auth.users u
+  where u.id = auth.uid()
+$$;
+
+revoke all on function public.authenticated_email() from public;
+grant execute on function public.authenticated_email() to authenticated;
+
 -- Admins autorizados pueden gestionar todos los perfiles
--- Usamos tanto la lista explícita como el rol en el JWT para mayor flexibilidad
 drop policy if exists "Admins can manage all profiles" on public.profiles;
 create policy "Admins can manage all profiles"
 on public.profiles
 for all
 to authenticated
 using (
-  lower(auth.jwt() ->> 'email') in (
+  public.authenticated_email() in (
     'mguzmanahumada@gmail.com',
     'a.gestiondepersonas@cftestatalaricayparinacota.cl',
     'gestiondepersonas@cftestatalaricayparinacota.cl',
     'analista.gp@cftestatalaricayparinacota.cl',
     'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
   )
-  OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
 )
 with check (
-  lower(auth.jwt() ->> 'email') in (
+  public.authenticated_email() in (
     'mguzmanahumada@gmail.com',
     'a.gestiondepersonas@cftestatalaricayparinacota.cl',
     'gestiondepersonas@cftestatalaricayparinacota.cl',
     'analista.gp@cftestatalaricayparinacota.cl',
     'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
   )
-  OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
 );
 
 create or replace function public.set_profiles_updated_at()
@@ -88,3 +103,62 @@ values
   ('asis.gestiondepersonas@cftestatalaricayparinacota.cl', 'admin', '', '')
 on conflict (email)
 do update set role = excluded.role, updated_at = now();
+
+-- Bus de eventos para sincronización en tiempo real entre administradores
+create table if not exists public.sync_events (
+  id bigint generated always as identity primary key,
+  scope text not null check (scope in ('records', 'employees', 'admin')),
+  action text not null,
+  actor_email text,
+  origin_client_id text not null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+grant select, insert on table public.sync_events to authenticated;
+
+alter table public.sync_events enable row level security;
+
+drop policy if exists "Authenticated users can read sync events" on public.sync_events;
+create policy "Authenticated users can read sync events"
+on public.sync_events
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Authenticated users can insert sync events" on public.sync_events;
+create policy "Authenticated users can insert sync events"
+on public.sync_events
+for insert
+to authenticated
+with check (auth.uid() is not null);
+
+create index if not exists idx_sync_events_scope_created_at
+on public.sync_events (scope, created_at desc);
+
+-- Habilitar tablas en publicación Realtime (idempotente)
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'profiles'
+    ) then
+      alter publication supabase_realtime add table public.profiles;
+    end if;
+
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'sync_events'
+    ) then
+      alter publication supabase_realtime add table public.sync_events;
+    end if;
+  end if;
+end;
+$$;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     X,
     Settings,
@@ -32,6 +32,7 @@ import {
     isMandatoryAdminEmail
 } from '../utils/userAdminStorage';
 import { appendAuditLog, getAuditLog } from '../utils/audit';
+import { subscribeToProfileChanges } from '../services/realtimeSync';
 
 interface AdminPanelProps {
     isOpen: boolean;
@@ -85,9 +86,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
     const [showPasswordByEmail, setShowPasswordByEmail] = useState<Record<string, boolean>>({});
     const [adminAuditEntries, setAdminAuditEntries] = useState(() => getAuditLog().slice(0, 30));
+    const profilesRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const upsertRemoteProfile = async ({ email, role, firstName, lastName }: RemoteProfileInput): Promise<void> => {
-        console.log('AdminPanel: Upserting profile for', email, { role, firstName, lastName });
         const { error: upsertError } = await supabase
             .from('profiles')
             .upsert({
@@ -98,18 +99,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             }, { onConflict: 'email' });
 
         if (upsertError) {
-            console.error('AdminPanel: Error in upsertRemoteProfile:', upsertError);
             throw upsertError;
         }
     };
 
-    useEffect(() => {
-        if (isOpen) {
-            void loadUsers();
-        }
-    }, [isOpen]);
-
-    const loadUsers = async () => {
+    const loadUsers = useCallback(async () => {
         const roles = loadUserRoles();
         const profiles = loadUserProfiles();
         const passwords = loadUserPasswords();
@@ -184,7 +178,37 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         });
         setPasswordDrafts(passwordMap);
         setAdminAuditEntries(getAuditLog().slice(0, 30));
-    };
+    }, []);
+
+    useEffect(() => {
+        if (isOpen) {
+            void loadUsers();
+        }
+    }, [isOpen, loadUsers]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const unsubscribe = subscribeToProfileChanges({
+            channelKey: 'admin-panel',
+            onChange: () => {
+                if (profilesRefreshTimeoutRef.current) return;
+
+                profilesRefreshTimeoutRef.current = setTimeout(() => {
+                    profilesRefreshTimeoutRef.current = null;
+                    void loadUsers();
+                }, 600);
+            }
+        });
+
+        return () => {
+            if (profilesRefreshTimeoutRef.current) {
+                clearTimeout(profilesRefreshTimeoutRef.current);
+                profilesRefreshTimeoutRef.current = null;
+            }
+            unsubscribe();
+        };
+    }, [isOpen, loadUsers]);
 
     const handleCreateUser = async () => {
         if (!createFirstName.trim() || !createLastName.trim() || !createEmail.trim() || !createPassword.trim()) {

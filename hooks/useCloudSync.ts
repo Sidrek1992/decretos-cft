@@ -10,6 +10,7 @@ import {
 } from '../utils/parsers';
 import { localBackup } from '../services/localBackup';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
+import { publishSyncEvent, subscribeToSyncEvents } from '../services/realtimeSync';
 
 const syncLogger = logger.create('CloudSync');
 
@@ -34,7 +35,8 @@ interface UseCloudSyncReturn {
 
 export const useCloudSync = (
   onSyncSuccess?: () => void,
-  onSyncError?: (error: string) => void
+  onSyncError?: (error: string) => void,
+  actorEmail?: string
 ): UseCloudSyncReturn => {
   const [records, setRecords] = useState<PermitRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -51,6 +53,7 @@ export const useCloudSync = (
   });
 
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const realtimeRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDataRef = useRef<PermitRecord[] | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const hasLoadedRef = useRef(false);
@@ -68,6 +71,9 @@ export const useCloudSync = (
       window.removeEventListener('offline', handleOffline);
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+      }
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
       }
     };
   }, []);
@@ -217,6 +223,29 @@ export const useCloudSync = (
     }
   }, [onSyncSuccess, onSyncError]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeToSyncEvents({
+      scope: 'records',
+      channelKey: 'cloud-sync',
+      onEvent: () => {
+        if (realtimeRefreshTimeoutRef.current) return;
+
+        realtimeRefreshTimeoutRef.current = setTimeout(() => {
+          realtimeRefreshTimeoutRef.current = null;
+          void fetchFromCloud();
+        }, 900);
+      }
+    });
+
+    return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
+      unsubscribe();
+    };
+  }, [fetchFromCloud]);
+
   const fetchModuleFromCloud = useCallback(async (module: 'PA' | 'FL') => {
     if (!navigator.onLine) {
       setSyncError(true);
@@ -357,6 +386,22 @@ export const useCloudSync = (
         setPendingSync(false);
         setIsRetryScheduled(false);
         pendingDataRef.current = null;
+
+        try {
+          await publishSyncEvent({
+            scope: 'records',
+            action: 'sync_to_cloud',
+            actorEmail,
+            metadata: {
+              total: dataToSync.length,
+              pa: paData.length,
+              fl: flData.length,
+            }
+          });
+        } catch (realtimeError) {
+          syncLogger.warn('No se pudo publicar evento realtime de decretos:', realtimeError);
+        }
+
         syncLogger.info('Sincronización completada exitosamente');
         onSyncSuccess?.();
         return true;
@@ -385,7 +430,7 @@ export const useCloudSync = (
     } finally {
       setIsSyncing(false);
     }
-  }, [isOnline, onSyncSuccess, onSyncError]);
+  }, [isOnline, onSyncSuccess, onSyncError, actorEmail]);
 
   useEffect(() => {
     if (isOnline && pendingSync && pendingDataRef.current && !isSyncing) {

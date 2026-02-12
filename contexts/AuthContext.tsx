@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { UserRole, Permissions, getPermissions, hasPermission, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
 import { appendAuditLog } from '../utils/audit';
 import { getUserSecurityByEmail, isMandatoryAdminEmail, loadUserRoles, touchUserLastAccess, updateUserSecurity } from '../utils/userAdminStorage';
+import { subscribeToProfileChanges } from '../services/realtimeSync';
 
 interface UserProfile {
     id: string;
@@ -92,7 +93,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     // Cargar perfil desde Supabase para persistir rol entre dispositivos
-    const loadProfile = async (userId: string, email?: string): Promise<void> => {
+    const loadProfile = useCallback(async (userId: string, email?: string): Promise<void> => {
         const normalizedEmail = email?.trim().toLowerCase();
         if (!normalizedEmail) {
             setProfile(null);
@@ -135,7 +136,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         setProfile(null);
-    };
+    }, []);
 
     useEffect(() => {
         // Obtener sesión actual
@@ -214,7 +215,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return () => {
             subscription.unsubscribe();
         };
-    }, []);
+    }, [loadProfile]);
+
+    useEffect(() => {
+        if (!user?.id || !user?.email) return;
+
+        const unsubscribe = subscribeToProfileChanges({
+            channelKey: 'auth-context',
+            email: user.email,
+            onChange: () => {
+                void loadProfile(user.id, user.email);
+            }
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [user?.id, user?.email, loadProfile]);
 
     const signIn = async (email: string, password: string) => {
         const normalizedEmail = email.trim().toLowerCase();

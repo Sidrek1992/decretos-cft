@@ -56,6 +56,57 @@ import {
   Menu, X, ChevronDown, ChevronRight, Zap, Shield, Eye
 } from 'lucide-react';
 
+interface OperationalSummaryItem {
+  id: string;
+  funcionario: string;
+  rut: string;
+  solicitudType: 'PA' | 'FL';
+  start: Date;
+  end: Date;
+  startKey: string;
+  endKey: string;
+  totalDays: number;
+}
+
+const MAX_OPERATIONAL_ITEMS = 6;
+
+const toOperationalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseOperationalDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getOperationalRange = (
+  record: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>
+): { start: Date; end: Date } | null => {
+  const start = parseOperationalDate(record.fechaInicio);
+  if (!start) return null;
+
+  let end: Date | null = null;
+  if (record.solicitudType === 'FL' && record.fechaTermino) {
+    end = parseOperationalDate(record.fechaTermino);
+  }
+
+  if (!end || end < start) {
+    const days = Math.max(Math.ceil(Number(record.cantidadDias || 1)), 1);
+    end = new Date(start);
+    end.setDate(start.getDate() + days - 1);
+  }
+
+  return { start, end };
+};
+
+const formatOperationalShortDate = (date: Date): string => {
+  return date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MOBILE MENU COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
@@ -360,7 +411,8 @@ const AppContent: React.FC = () => {
     fetchEmployeesFromCloud
   } = useEmployeeSync(
     () => { }, // onSuccess silencioso para empleados
-    (error) => console.warn('Error empleados:', error)
+    (error) => console.warn('Error empleados:', error),
+    user?.email
   );
 
   const [editingRecord, setEditingRecord] = useState<PermitRecord | null>(null);
@@ -399,7 +451,8 @@ const AppContent: React.FC = () => {
     canUndo
   } = useCloudSync(
     () => toast.success('Sincronizado', 'Datos actualizados correctamente'),
-    (error) => toast.error('Error de sincronización', error)
+    (error) => toast.error('Error de sincronización', error),
+    user?.email
   );
 
   const lastWarningsRef = useRef('');
@@ -439,6 +492,56 @@ const AppContent: React.FC = () => {
     });
     return count;
   }, [records, employees]);
+
+  const operationalOverview = useMemo(() => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const todayKey = toOperationalDateKey(today);
+    const tomorrowKey = toOperationalDateKey(tomorrow);
+
+    const entries: OperationalSummaryItem[] = records
+      .filter(record => record.solicitudType === 'PA' || record.solicitudType === 'FL')
+      .map(record => {
+        const range = getOperationalRange(record);
+        if (!range) return null;
+
+        const totalDays = Math.max(
+          Math.floor((range.end.getTime() - range.start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+          1
+        );
+
+        return {
+          id: record.id,
+          funcionario: record.funcionario,
+          rut: record.rut,
+          solicitudType: record.solicitudType,
+          start: range.start,
+          end: range.end,
+          startKey: toOperationalDateKey(range.start),
+          endKey: toOperationalDateKey(range.end),
+          totalDays
+        };
+      })
+      .filter((entry): entry is OperationalSummaryItem => entry !== null)
+      .sort((a, b) => a.start.getTime() - b.start.getTime() || a.funcionario.localeCompare(b.funcionario, 'es', { sensitivity: 'base' }));
+
+    const startsToday = entries.filter(entry => entry.startKey === todayKey);
+    const startsTomorrow = entries.filter(entry => entry.startKey === tomorrowKey);
+    const activeNow = entries
+      .filter(entry => entry.startKey <= todayKey && entry.endKey >= todayKey)
+      .sort((a, b) => a.end.getTime() - b.end.getTime() || a.funcionario.localeCompare(b.funcionario, 'es', { sensitivity: 'base' }));
+
+    return {
+      startsToday,
+      startsTomorrow,
+      activeNow,
+      todayLabel: today.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' }),
+      tomorrowLabel: tomorrow.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' })
+    };
+  }, [records]);
 
   const handleSubmit = (formData: PermitFormData) => {
     const actor = user?.email || 'sistema';
