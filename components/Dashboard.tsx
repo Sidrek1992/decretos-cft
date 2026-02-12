@@ -51,16 +51,15 @@ const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
 const getAnalyticsDays = (record: PermitRecord): number => {
     const cantidadDias = Number(record.cantidadDias || 0);
 
+    // Priorizamos siempre cantidadDias si existe y es > 0
+    if (cantidadDias > 0) return cantidadDias;
+
     if (record.solicitudType === 'FL') {
         const solicitadoP1 = Number(record.solicitadoP1 ?? 0);
         const solicitadoP2 = Number(record.solicitadoP2 ?? 0);
         const solicitadoTotal = solicitadoP1 + solicitadoP2;
 
         if (solicitadoTotal > 0) return solicitadoTotal;
-
-        // Para mantener consistencia con el registro de decretos,
-        // usar cantidadDias antes de inferir desde saldos.
-        if (cantidadDias > 0) return cantidadDias;
 
         const saldoDispP1 = Number(record.saldoDisponibleP1 ?? 0);
         const saldoFinalP1 = Number(record.saldoFinalP1 ?? 0);
@@ -75,6 +74,9 @@ const getAnalyticsDays = (record: PermitRecord): number => {
 };
 
 const getFLRequestedPeriodDays = (record: PermitRecord): number => {
+    // Priorizamos cantidadDias para mantener consistencia con getAnalyticsDays
+    if (record.cantidadDias > 0) return record.cantidadDias;
+
     const solicitadoP1 = Number(record.solicitadoP1 ?? 0);
     const solicitadoP2 = Number(record.solicitadoP2 ?? 0);
     return solicitadoP1 + solicitadoP2;
