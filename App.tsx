@@ -639,6 +639,15 @@ const AppContent: React.FC = () => {
     return user?.email;
   }, [profile, user]);
 
+  const shouldHideSummaryCards =
+    showDashboard ||
+    showAdminPanel ||
+    modals.employeeList ||
+    modals.decreeBook ||
+    modals.calendar ||
+    modals.themeSelector ||
+    modals.shortcuts;
+
   return (
     <div className="min-h-screen">
       {/* ═══════════════════════════════════════════════════════════════════════════
@@ -886,9 +895,12 @@ const AppContent: React.FC = () => {
           syncStatusDotClass={syncStatusDotClass}
         />
 
-        <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
-
-        <OperationalOverview records={records} variant="compact" />
+        {!shouldHideSummaryCards && (
+          <>
+            <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
+            <OperationalOverview records={records} variant="compact" />
+          </>
+        )}
 
         {/* Dashboard condicional (lazy loaded) */}
         {showDashboard && (
