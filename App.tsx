@@ -830,30 +830,30 @@ const AppContent: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:pl-0 lg:pr-6 py-8 sm:py-10 page-fade-in">
-        <div className="lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-6 xl:gap-8">
+        <div className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-6 xl:gap-8">
           {/* Panel vertical izquierdo (desktop) */}
-          <aside className="hidden lg:block lg:ml-[calc((100vw-100%)/-2+3px)]">
+          <aside className="hidden lg:block lg:ml-[calc((100vw-100%)/-2+12px)]">
             <div className="sticky top-24">
-              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800 dark:to-indigo-900/20">
+              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm shadow-sm overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-800 dark:to-indigo-900/20">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Navegación</p>
                   <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-wide mt-0.5">Panel principal</h3>
                 </div>
 
-                <div className="p-2 space-y-1.5">
+                <div className="p-1.5 space-y-1.5">
                   <button
                     onClick={() => openModal('employeeList')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${modals.employeeList
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.employeeList
                       ? 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${modals.employeeList ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
                       <Users className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-black uppercase tracking-wider">Gestión de personal</p>
-                      <p className="text-[10px] opacity-70">Funcionarios registrados</p>
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Gestión de personal</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Funcionarios registrados</p>
                     </div>
                     <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-black bg-white/80 dark:bg-slate-700/80 border border-slate-200 dark:border-slate-600">
                       {employees.length}
@@ -862,49 +862,49 @@ const AppContent: React.FC = () => {
 
                   <button
                     onClick={() => setShowDashboard(p => !p)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${showDashboard
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${showDashboard
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${showDashboard ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
                       <BarChart3 className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] font-black uppercase tracking-wider">Dashboard</p>
-                      <p className="text-[10px] opacity-70">Estadísticas y analítica</p>
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Dashboard</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Estadísticas y analítica</p>
                     </div>
                   </button>
 
                   <button
                     onClick={() => openModal('decreeBook')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${modals.decreeBook
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.decreeBook
                       ? 'bg-amber-50 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200 dark:ring-amber-800'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${modals.decreeBook ? 'bg-amber-100 dark:bg-amber-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
                       <BookOpen className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] font-black uppercase tracking-wider">Libro de decretos</p>
-                      <p className="text-[10px] opacity-70">Historial institucional</p>
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Libro de decretos</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Historial institucional</p>
                     </div>
                   </button>
 
                   <button
                     onClick={() => openModal('calendar')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${modals.calendar
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.calendar
                       ? 'bg-sky-50 dark:bg-sky-900/25 text-sky-700 dark:text-sky-300 ring-1 ring-sky-200 dark:ring-sky-800'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
                     <div className={`p-1.5 rounded-lg ${modals.calendar ? 'bg-sky-100 dark:bg-sky-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
                       <CalendarDays className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] font-black uppercase tracking-wider">Calendario</p>
-                      <p className="text-[10px] opacity-70">Ausencias y programación</p>
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Calendario</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Ausencias y programación</p>
                     </div>
                   </button>
                 </div>
