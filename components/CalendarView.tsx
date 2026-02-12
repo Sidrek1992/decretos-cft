@@ -16,22 +16,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
     const today = new Date();
     const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
 
-    // Enriquecer registros con departamentos si faltan
-    const enrichedRecords = useMemo(() => {
-        const empMap = new Map<string, string>();
-        employees.forEach(e => {
-            if (e.departamento) empMap.set(e.rut, e.departamento);
-        });
 
-        return records.map(r => {
-            if (r.departamento) return r;
-            const depto = empMap.get(r.rut);
-            return depto ? { ...r, departamento: depto } : r;
-        });
-    }, [records, employees]);
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('todos');
-    const [deptoFilter, setDeptoFilter] = useState('todos');
     const [employeeSearch, setEmployeeSearch] = useState('');
     const [showInsights, setShowInsights] = useState(true);
 
@@ -53,33 +40,27 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
         });
         years.add(today.getFullYear());
         return [...years].sort((a, b) => b - a);
-    }, [enrichedRecords]);
+    }, [records]);
 
-    // Departamentos únicos
-    const departments = useMemo(() => {
-        const set = new Set<string>();
-        enrichedRecords.forEach(r => {
-            if (r.departamento) set.add(r.departamento);
-        });
-        return [...set].sort();
-    }, [enrichedRecords]);
+
 
     // Filtrar registros según tipo + búsqueda de empleado + depto
     const filteredRecords = useMemo(() => {
         const normalizedEmployeeSearch = normalizeSearchText(employeeSearch);
         const normalizedRutSearch = normalizeRutForSearch(employeeSearch);
 
-        return enrichedRecords.filter(r => {
+        return records.filter(r => {
             if (typeFilter !== 'todos' && r.solicitudType !== typeFilter) return false;
-            if (deptoFilter !== 'todos' && r.departamento !== deptoFilter) return false;
             if (normalizedEmployeeSearch) {
                 const matchesEmployee = normalizeSearchText(r.funcionario).includes(normalizedEmployeeSearch);
-                const matchesRut = normalizeRutForSearch(r.rut).includes(normalizedRutSearch);
+                const matchesRut = normalizedRutSearch
+                    ? normalizeRutForSearch(r.rut).includes(normalizedRutSearch)
+                    : false;
                 if (!matchesEmployee && !matchesRut) return false;
             }
             return true;
         });
-    }, [enrichedRecords, typeFilter, deptoFilter, employeeSearch]);
+    }, [records, typeFilter, employeeSearch]);
 
     // Agrupar por día con info de rango
     const decreesByDay = useMemo(() => {
@@ -116,7 +97,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
         return grouped;
     }, [filteredRecords, year, month]);
 
-    // Cálculos para Dashboard (Insights)
+    // Cálculos para Dashboard (Insights) - Ahora respetan el filtro de búsqueda
     const insights = useMemo(() => {
         const now = new Date();
         const todayStr = now.toISOString().split('T')[0];
@@ -128,9 +109,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
         const onLeaveToday: PermitRecord[] = [];
         const upcomingNextWeek: PermitRecord[] = [];
 
-        // Usar enrichedRecords originales (sin filtros de búsqueda) pero sí con depto si está seleccionado
-        enrichedRecords.forEach(r => {
-            if (deptoFilter !== 'todos' && r.departamento !== deptoFilter) return;
+        // Usar filteredRecords para que el panel lateral también se filtre al buscar
+        filteredRecords.forEach(r => {
             if (!r.fechaInicio) return;
 
             const start = new Date(r.fechaInicio + 'T12:00:00');
@@ -150,7 +130,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                 onLeaveToday.push(r);
             }
 
-            // Próxima semana (inician entre mañana y 7 días más)
+            // Próxima semana
             const tomorrow = new Date(now);
             tomorrow.setDate(now.getDate() + 1);
             const tomorrowStr = tomorrow.toISOString().split('T')[0];
@@ -161,7 +141,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
         });
 
         return { onLeaveToday, upcomingNextWeek };
-    }, [enrichedRecords, deptoFilter]);
+    }, [filteredRecords]);
 
     // Resumen mensual (respetando depto)
     const monthlySummary = useMemo(() => {
@@ -215,7 +195,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                 <Calendar className="w-6 h-6" />
                             </div>
                             <div>
-                                <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-tight">Advanced Team Calendar</h2>
+                                <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-tight">Calendario de Decretos</h2>
                                 <div className="flex items-center gap-2 mt-0.5">
                                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                                     <p className="text-[10px] sm:text-xs opacity-70 font-black uppercase tracking-[0.2em]">Dashboard Operativo 2026</p>
@@ -242,18 +222,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                     {showInsights && (
                         <div className="hidden lg:flex w-72 flex-col border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 overflow-y-auto custom-scrollbar animate-in slide-in-from-left duration-300">
                             <div className="p-6 space-y-8">
-                                {/* Depto Filter in Sidebar */}
-                                <div className="space-y-3">
-                                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Filtrar por Departamento</p>
-                                    <select
-                                        value={deptoFilter}
-                                        onChange={e => setDeptoFilter(e.target.value)}
-                                        className="w-full bg-white dark:bg-slate-800 border-none rounded-xl px-4 py-3 shadow-sm text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none cursor-pointer"
-                                    >
-                                        <option value="todos">Todos los departamentos</option>
-                                        {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                </div>
+
 
                                 {/* Today's Status */}
                                 <div className="space-y-4">
@@ -269,7 +238,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                                 <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase truncate group-hover:text-indigo-600">{r.funcionario}</p>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${r.solicitudType === 'PA' ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-500'}`}>{r.solicitudType}</span>
-                                                    <p className="text-[9px] text-slate-400 font-bold">{r.departamento || 'No asignado'}</p>
                                                 </div>
                                             </div>
                                         )) : (
@@ -339,15 +307,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                     })}
                                 </div>
 
-                                {/* Depto Dropdown (solo para mobile/tablet si sidebar oculto) */}
-                                <select
-                                    value={deptoFilter}
-                                    onChange={e => setDeptoFilter(e.target.value)}
-                                    className="lg:hidden bg-slate-100 dark:bg-slate-700 border-none rounded-xl px-3 py-1.5 text-[10px] font-black text-slate-600"
-                                >
-                                    <option value="todos">Departamentos</option>
-                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                                </select>
+
                             </div>
 
                             <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -415,38 +375,44 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                     return (
                                         <div
                                             key={day}
-                                            onClick={() => hasRecords ? setSelectedDay(isSelected ? null : day) : setSelectedDay(null)}
+                                            onClick={() => {
+                                                if (hasRecords) {
+                                                    setSelectedDay(isSelected ? null : day);
+                                                } else {
+                                                    setSelectedDay(null);
+                                                }
+                                            }}
                                             className={[
                                                 'min-h-[140px] p-3 rounded-2xl border-2 transition-all relative overflow-hidden group',
                                                 activeToday ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20' : weekend ? 'border-transparent bg-slate-50/30 dark:bg-slate-900/5' : 'border-transparent bg-slate-50/80 dark:bg-slate-800/40',
                                                 hasRecords ? 'cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-xl hover:-translate-y-1' : '',
-                                                isSelected ? 'border-indigo-500 shadow-lg ring-4 ring-indigo-500/10' : ''
+                                                isSelected ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/40 shadow-lg ring-4 ring-indigo-500/10 z-10' : ''
                                             ].join(' ')}
                                         >
                                             <div className="flex items-center justify-between mb-3">
                                                 <span className={[
                                                     'text-sm font-black transition-colors',
-                                                    activeToday ? 'text-indigo-600 dark:text-indigo-400' : weekend ? 'text-rose-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-900 dark:group-hover:text-white'
+                                                    activeToday || isSelected ? 'text-indigo-600 dark:text-indigo-400' : weekend ? 'text-rose-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-900 dark:group-hover:text-white'
                                                 ].join(' ')}>
                                                     {day.toString().padStart(2, '0')}
                                                 </span>
-                                                {activeToday && <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />}
+                                                {(activeToday || isSelected) && <span className={`w-1.5 h-1.5 rounded-full bg-indigo-600 ${activeToday ? 'animate-ping' : ''}`} />}
                                             </div>
 
                                             {hasRecords && (
                                                 <div className="space-y-1.5">
                                                     {dayRecords.slice(0, 4).map((entry, idx) => {
                                                         const isPA = entry.record.solicitudType === 'PA';
-                                                        const bg = isPA ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white';
+                                                        const bg = isPA ? 'bg-indigo-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm';
                                                         const radius = badgeRadius(entry.isStart, entry.isEnd);
 
                                                         return (
                                                             <div
                                                                 key={idx}
-                                                                className={`${bg} ${radius} text-[9px] px-2 py-1 font-black shadow-sm flex items-center gap-1 min-w-0`}
+                                                                className={`${bg} ${radius} text-[9px] px-2 py-1 font-black shadow-sm flex items-center justify-between gap-1 min-w-0 transition-transform hover:scale-105`}
                                                             >
                                                                 <span className="truncate uppercase">{entry.record.funcionario.split(' ')[0]}</span>
-                                                                {entry.isStart && <div className="w-1 h-1 rounded-full bg-white animate-pulse" />}
+                                                                {entry.isStart && <div className="w-1 h-1 rounded-full bg-white shrink-0" />}
                                                             </div>
                                                         );
                                                     })}
@@ -462,6 +428,103 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                 })}
                             </div>
                         </div>
+
+                        {/* ─── Panel de Detalles (Sliding Right Panel) ─── */}
+                        {selectedDay && (
+                            <div className="absolute top-0 right-0 bottom-0 w-full sm:w-96 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border-l border-slate-200 dark:border-slate-700 shadow-2xl z-[100] animate-in slide-in-from-right duration-300 flex flex-col">
+                                <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
+                                    <div>
+                                        <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Decretos Registrados</h4>
+                                        <p className="text-[10px] font-bold text-indigo-600 uppercase mt-1">
+                                            {selectedDay} de {monthNames[month]} de {year}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedDay(null)}
+                                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all"
+                                    >
+                                        <X className="w-5 h-5 text-slate-400" />
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                                    {decreesByDay[selectedDay]?.map((entry, idx) => {
+                                        const isPA = entry.record.solicitudType === 'PA';
+                                        return (
+                                            <div
+                                                key={idx}
+                                                className={`p-4 rounded-2xl border ${isPA ? 'bg-indigo-50/30 border-indigo-100' : 'bg-amber-50/30 border-amber-100'} transition-all hover:shadow-md cursor-default group`}
+                                            >
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${isPA ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white'}`}>
+                                                            {entry.record.solicitudType}
+                                                        </span>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase">#{entry.record.acto}</span>
+                                                    </div>
+                                                    <FileText className={`w-4 h-4 ${isPA ? 'text-indigo-400' : 'text-amber-400'} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                                                </div>
+
+                                                <h5 className="text-xs font-black text-slate-800 dark:text-white uppercase leading-tight mb-1">
+                                                    {entry.record.funcionario}
+                                                </h5>
+                                                {entry.record.materia && (
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-3 tracking-wide">{entry.record.materia}</p>
+                                                )}
+
+                                                <div className="grid grid-cols-2 gap-2 mt-4">
+                                                    <div className="p-2 rounded-xl bg-white dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5 tracking-tighter">Desde</p>
+                                                        <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">{entry.record.fechaInicio}</p>
+                                                    </div>
+                                                    <div className="p-2 rounded-xl bg-white dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5 tracking-tighter">Hasta</p>
+                                                        <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">{entry.record.fechaTermino || entry.record.fechaInicio}</p>
+                                                    </div>
+                                                    <div className="p-2 rounded-xl bg-white dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5 tracking-tighter">Duración</p>
+                                                        <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">{entry.record.cantidadDias} días</p>
+                                                    </div>
+                                                    <div className="p-2 rounded-xl bg-white dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5 tracking-tighter">Jornada</p>
+                                                        <p className="text-[10px] font-bold text-slate-700 dark:text-slate-200">{entry.record.tipoJornada || 'Completa'}</p>
+                                                    </div>
+                                                </div>
+
+                                                {entry.record.periodo && (
+                                                    <div className="mt-3">
+                                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[8px] font-bold text-slate-500 uppercase tracking-tighter">
+                                                            P: {entry.record.periodo}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {entry.record.observaciones && (
+                                                    <div className="mt-3 p-2 bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">
+                                                        <p className="text-[9px] text-slate-500 dark:text-slate-400 italic">
+                                                            "{entry.record.observaciones}"
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                <div className="mt-4 pt-3 border-t border-slate-200/50 dark:border-slate-600/50 flex items-center justify-between">
+                                                    <span className={`text-[9px] font-black uppercase italic ${isPA ? 'text-indigo-500' : 'text-amber-600'}`}>
+                                                        {entry.isStart ? '● Inicia hoy' : entry.isEnd ? '◆ Termina hoy' : '─ Continuando'}
+                                                    </span>
+                                                    {entry.dayNumber > 0 && (
+                                                        <span className="text-[8px] font-bold text-slate-400 uppercase">Día {entry.dayNumber}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase text-center tracking-widest">
+                                        Total del día: {decreesByDay[selectedDay]?.length || 0} registros
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

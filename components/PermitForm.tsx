@@ -88,7 +88,6 @@ const PermitForm: React.FC<PermitFormProps> = ({
     fechaDecreto: new Date().toISOString().split('T')[0],
     ra: 'MGA',
     emite: 'mga',
-    departamento: '',
     observaciones: '',
     fechaTermino: '',
     periodo1: defaultPeriodo1,
@@ -350,7 +349,6 @@ const PermitForm: React.FC<PermitFormProps> = ({
       ...prev,
       funcionario: toProperCase(emp.nombre),
       rut: formattedRut,
-      departamento: emp.departamento || ''
     }));
     setShowSuggestions(false);
     const rutError = validateField('rut', formattedRut);
@@ -753,18 +751,6 @@ const PermitForm: React.FC<PermitFormProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-2 block">
-                    Departamento
-                  </label>
-                  <input
-                    name="departamento"
-                    value={formData.departamento || ''}
-                    onChange={handleChange}
-                    placeholder="Área o Unidad"
-                    className="w-full px-4 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl font-bold text-slate-700 dark:text-slate-200 text-sm outline-none focus:border-indigo-500"
-                  />
-                </div>
               </div>
             </div>
 
