@@ -162,3 +162,65 @@ begin
   end if;
 end;
 $$;
+
+-- ==========================================
+-- AUDIT LOGS & VERSIONING
+-- ==========================================
+create table if not exists public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  scope text not null,
+  action text not null,
+  actor_email text not null,
+  target_id text,
+  target_name text,
+  old_data jsonb,
+  new_data jsonb,
+  details text,
+  created_at timestamptz not null default now()
+);
+
+grant select, insert on table public.audit_logs to authenticated;
+alter table public.audit_logs enable row level security;
+
+drop policy if exists "Admins can read all audit logs" on public.audit_logs;
+create policy "Admins can read all audit logs"
+on public.audit_logs
+for select
+to authenticated
+using (
+  public.authenticated_email() in (
+    'mguzmanahumada@gmail.com',
+    'a.gestiondepersonas@cftestatalaricayparinacota.cl',
+    'gestiondepersonas@cftestatalaricayparinacota.cl',
+    'analista.gp@cftestatalaricayparinacota.cl',
+    'asis.gestiondepersonas@cftestatalaricayparinacota.cl'
+  )
+);
+
+drop policy if exists "Authenticated users can insert audit logs" on public.audit_logs;
+create policy "Authenticated users can insert audit logs"
+on public.audit_logs
+for insert
+to authenticated
+with check (true);
+
+create index if not exists idx_audit_logs_actor_email on public.audit_logs (actor_email);
+create index if not exists idx_audit_logs_scope_action on public.audit_logs (scope, action);
+create index if not exists idx_audit_logs_created_at on public.audit_logs (created_at desc);
+
+-- Añadir audit_logs a la publicación Realtime
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'audit_logs'
+    ) then
+      alter publication supabase_realtime add table public.audit_logs;
+    end if;
+  end if;
+end;
+$$;

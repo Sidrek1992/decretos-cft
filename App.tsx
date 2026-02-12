@@ -456,17 +456,24 @@ const AppContent: React.FC = () => {
         action: 'update_decree',
         actor,
         target: `${formData.solicitudType} ${formData.acto}`,
-        details: `Funcionario: ${formData.funcionario}`
+        target_id: editingRecord.id,
+        details: `Funcionario: ${formData.funcionario}`,
+        old_data: editingRecord,
+        new_data: formData
       });
     } else {
-      updated = [...records, { ...formData, id: crypto.randomUUID(), createdAt: Date.now() }];
+      const newId = crypto.randomUUID();
+      const newRecord = { ...formData, id: newId, createdAt: Date.now() };
+      updated = [...records, newRecord];
       toast.success('Decreto emitido', `Resolución ${formData.acto} creada exitosamente`);
       appendAuditLog({
         scope: 'decree',
         action: 'create_decree',
         actor,
         target: `${formData.solicitudType} ${formData.acto}`,
-        details: `Funcionario: ${formData.funcionario}`
+        target_id: newId,
+        details: `Funcionario: ${formData.funcionario}`,
+        new_data: newRecord
       });
     }
     setRecords(updated);
@@ -490,7 +497,9 @@ const AppContent: React.FC = () => {
         action: 'delete_decree',
         actor: user?.email || 'sistema',
         target: deleted ? `${deleted.solicitudType} ${deleted.acto}` : deleteTargetId,
-        details: deleted ? `Funcionario: ${deleted.funcionario}` : 'Eliminado por ID'
+        target_id: deleteTargetId,
+        details: deleted ? `Funcionario: ${deleted.funcionario}` : 'Eliminado por ID',
+        old_data: deleted
       });
       setDeleteTargetId(null);
     }
