@@ -74,11 +74,11 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newEmployee, setNewEmployee] = useState({ nombre: '', rut: '' });
+  const [newEmployee, setNewEmployee] = useState({ nombre: '', rut: '', departamento: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   // Edición in-line
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ nombre: '', rut: '' });
+  const [editForm, setEditForm] = useState({ nombre: '', rut: '', departamento: '' });
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   // Importación masiva
@@ -256,8 +256,8 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   const validateEmployeeIdentity = (
     nombre: string,
     rut: string,
-    options: { ignoreEmployeeRut?: string; ignoreEmployeeName?: string } = {}
-  ): { normalizedName: string; normalizedRut: string } | null => {
+    options: { ignoreEmployeeRut?: string; ignoreEmployeeName?: string; departamento?: string } = {}
+  ): { normalizedName: string; normalizedRut: string; normalizedDepto: string } | null => {
     const normalizedName = String(nombre || '').trim().toUpperCase();
     const normalizedRut = formatRutForStorage(rut);
 
@@ -286,21 +286,26 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
       return null;
     }
 
-    return { normalizedName, normalizedRut };
+    return {
+      normalizedName,
+      normalizedRut,
+      normalizedDepto: String(options.departamento || '').trim()
+    };
   };
 
   const handleAddEmployee = () => {
     if (!newEmployee.nombre.trim() || !newEmployee.rut.trim()) return;
-    if (!onAddEmployee) return; // ★ Verificar que existe
+    if (!onAddEmployee) return;
 
-    const validated = validateEmployeeIdentity(newEmployee.nombre, newEmployee.rut);
+    const validated = validateEmployeeIdentity(newEmployee.nombre, newEmployee.rut, { departamento: newEmployee.departamento });
     if (!validated) return;
 
     onAddEmployee({
       nombre: validated.normalizedName,
       rut: validated.normalizedRut,
+      departamento: validated.normalizedDepto
     });
-    setNewEmployee({ nombre: '', rut: '' });
+    setNewEmployee({ nombre: '', rut: '', departamento: '' });
     setShowAddForm(false);
   };
 
@@ -345,7 +350,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
   // Funciones de edición in-line
   const startEdit = (emp: Employee) => {
     setEditingEmployee(emp.rut);
-    setEditForm({ nombre: emp.nombre, rut: emp.rut });
+    setEditForm({ nombre: emp.nombre, rut: emp.rut, departamento: emp.departamento || '' });
   };
 
   const saveEdit = (oldRut: string) => {
@@ -365,15 +370,16 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
       onUpdateEmployee(oldRut, {
         nombre: validated.normalizedName,
         rut: validated.normalizedRut,
+        departamento: validated.normalizedDepto
       });
     }
     setEditingEmployee(null);
-    setEditForm({ nombre: '', rut: '' });
+    setEditForm({ nombre: '', rut: '', departamento: '' });
   };
 
   const cancelEdit = () => {
     setEditingEmployee(null);
-    setEditForm({ nombre: '', rut: '' });
+    setEditForm({ nombre: '', rut: '', departamento: '' });
   };
 
   // Importación masiva desde Excel
@@ -708,10 +714,16 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                 className="flex-1 px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300"
               />
               <input
+                placeholder="Departamento/Área"
+                value={newEmployee.departamento}
+                onChange={e => setNewEmployee({ ...newEmployee, departamento: e.target.value })}
+                className="w-48 px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300"
+              />
+              <input
                 placeholder="RUT"
                 value={newEmployee.rut}
                 onChange={e => setNewEmployee({ ...newEmployee, rut: e.target.value })}
-                className="w-36 px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-[11px] font-bold tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300 font-mono"
+                className="w-32 px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-800 text-[11px] font-bold tracking-wide text-slate-700 dark:text-slate-200 placeholder:text-slate-300 font-mono"
               />
               <button
                 onClick={handleAddEmployee}
@@ -720,7 +732,7 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
                 <CheckCircle size={12} /> Guardar
               </button>
               <button
-                onClick={() => { setShowAddForm(false); setNewEmployee({ nombre: '', rut: '' }); }}
+                onClick={() => { setShowAddForm(false); setNewEmployee({ nombre: '', rut: '', departamento: '' }); }}
                 className="p-1.5 bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-300 transition-all"
               >
                 <XCircle size={14} />
@@ -760,9 +772,16 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[11px] font-black uppercase tracking-tight truncate ${isExpanded ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>
-                        {emp.nombre}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className={`text-[11px] font-black uppercase tracking-tight truncate ${isExpanded ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>
+                          {emp.nombre}
+                        </p>
+                        {emp.departamento && (
+                          <span className="text-[8px] font-black bg-slate-200 dark:bg-slate-600 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 uppercase">
+                            {emp.departamento}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 font-mono">
                         {emp.rut}
                       </p>

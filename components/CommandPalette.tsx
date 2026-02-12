@@ -29,7 +29,7 @@ interface CommandPaletteProps {
     onClose: () => void;
     records: PermitRecord[];
     employees: Employee[];
-    onNavigate: (view: 'dashboard' | 'calendar' | 'employees' | 'settings') => void;
+    onNavigate: (view: 'dashboard' | 'calendar' | 'personal' | 'settings') => void;
     onNewDecree: (type?: 'PA' | 'FL') => void;
     onSelectEmployee: (employee: Employee) => void;
     onSelectRecord: (record: PermitRecord) => void;
@@ -87,9 +87,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             id: 'nav-dashboard',
             type: 'navigation',
             icon: <BarChart3 className="w-4 h-4" />,
-            title: 'Ir al Dashboard',
-            subtitle: 'Ver estadísticas y reportes',
-            keywords: ['dashboard', 'estadisticas', 'reportes', 'graficos'],
+            title: 'Ir al Inicio',
+            subtitle: 'Ver resumen general y estadísticas',
+            keywords: ['inicio', 'home', 'dashboard', 'estadisticas', 'reportes'],
             action: () => { onNavigate('dashboard'); onClose(); },
             shortcut: 'D',
         },
@@ -110,7 +110,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             title: 'Lista de Funcionarios',
             subtitle: 'Gestionar empleados',
             keywords: ['funcionarios', 'empleados', 'personas', 'lista'],
-            action: () => { onNavigate('employees'); onClose(); },
+            action: () => { onNavigate('personal'); onClose(); },
             shortcut: 'E',
         },
         {
@@ -309,14 +309,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     onClick={item.action}
                                     onMouseEnter={() => setSelectedIndex(index)}
                                     className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${index === selectedIndex
-                                            ? 'bg-indigo-50 dark:bg-indigo-900/30'
-                                            : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                                        ? 'bg-indigo-50 dark:bg-indigo-900/30'
+                                        : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'
                                         }`}
                                 >
                                     {/* Icon */}
                                     <div className={`p-2 rounded-xl ${index === selectedIndex
-                                            ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'
-                                            : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                                        ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'
+                                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
                                         }`}>
                                         {item.icon}
                                     </div>
@@ -324,8 +324,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     {/* Content */}
                                     <div className="flex-1 min-w-0">
                                         <p className={`text-sm font-semibold truncate ${index === selectedIndex
-                                                ? 'text-indigo-900 dark:text-indigo-100'
-                                                : 'text-slate-800 dark:text-slate-200'
+                                            ? 'text-indigo-900 dark:text-indigo-100'
+                                            : 'text-slate-800 dark:text-slate-200'
                                             }`}>
                                             {item.title}
                                         </p>
@@ -350,8 +350,8 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
                                     {/* Arrow */}
                                     <ArrowRight className={`w-4 h-4 flex-shrink-0 transition-transform ${index === selectedIndex
-                                            ? 'text-indigo-500 translate-x-0.5'
-                                            : 'text-slate-300 dark:text-slate-600'
+                                        ? 'text-indigo-500 translate-x-0.5'
+                                        : 'text-slate-300 dark:text-slate-600'
                                         }`} />
                                 </button>
                             ))}

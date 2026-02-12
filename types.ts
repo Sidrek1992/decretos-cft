@@ -4,16 +4,18 @@ export type SolicitudType = 'PA' | 'FL';
 export interface Employee {
   nombre: string;
   rut: string;
+  departamento?: string;
 }
 
 export interface PermitRecord {
   id: string;
   solicitudType: SolicitudType;
-  decreto: string; 
+  decreto: string;
   materia: string;
   acto: string;
   funcionario: string;
   rut: string;
+  departamento?: string; // Nuevo campo para filtrado
   periodo: string;
   cantidadDias: number;
   fechaInicio: string;

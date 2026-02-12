@@ -24,12 +24,13 @@ interface UseEmployeeSyncReturn {
 const normalizeEmployeePayload = (employee: Employee): Employee | null => {
     const nombre = String(employee.nombre || '').trim().toUpperCase();
     const rut = formatRutForStorage(employee.rut);
+    const departamento = String(employee.departamento || '').trim();
 
     if (!nombre || !rut || !isValidRutModulo11(rut)) {
         return null;
     }
 
-    return { nombre, rut };
+    return { nombre, rut, departamento };
 };
 
 const dedupeEmployeesByRut = (employees: Employee[]): Employee[] => {
@@ -122,6 +123,7 @@ export const useEmployeeSync = (
                         const primerApellido = String(row[2] || '').trim();
                         const segundoApellido = String(row[3] || '').trim();
                         const rut = String(row[4] || '').trim();
+                        const departamento = String(row[5] || '').trim();
 
                         // Concatenar nombre completo
                         const nombreCompleto = [nombres, primerApellido, segundoApellido]
@@ -131,7 +133,8 @@ export const useEmployeeSync = (
 
                         return {
                             nombre: nombreCompleto,
-                            rut: rut
+                            rut: rut,
+                            departamento: departamento
                         };
                     })
                     .map(normalizeEmployeePayload)
@@ -262,7 +265,8 @@ export const useEmployeeSync = (
                     nombres,        // Nombres
                     primerApellido, // Primer Apellido
                     segundoApellido,// Segundo Apellido
-                    emp.rut         // RUT
+                    emp.rut,        // RUT
+                    emp.departamento || '' // Departamento
                 ];
             });
 

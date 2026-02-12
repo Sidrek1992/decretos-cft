@@ -84,6 +84,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
     fechaDecreto: new Date().toISOString().split('T')[0],
     ra: 'MGA',
     emite: 'mga',
+    departamento: '',
     observaciones: '',
     fechaTermino: '',
     periodo1: defaultPeriodo1,
@@ -319,7 +320,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
 
         const scannedSaldo = typeof first.saldoDisponible === 'number' ? first.saldoDisponible : null;
         setDetectedSaldo(scannedSaldo);
-    }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
       console.error('[AI] Error al procesar PDF:', err);
@@ -333,7 +334,12 @@ const PermitForm: React.FC<PermitFormProps> = ({
 
   const selectEmployee = (emp: Employee) => {
     const formattedRut = formatRutForStorage(emp.rut) || formatRut(emp.rut);
-    setFormData(prev => ({ ...prev, funcionario: toProperCase(emp.nombre), rut: formattedRut }));
+    setFormData(prev => ({
+      ...prev,
+      funcionario: toProperCase(emp.nombre),
+      rut: formattedRut,
+      departamento: emp.departamento || ''
+    }));
     setShowSuggestions(false);
     const rutError = validateField('rut', formattedRut);
     setErrors(prev => ({ ...prev, rut: rutError }));
@@ -359,6 +365,16 @@ const PermitForm: React.FC<PermitFormProps> = ({
     if (!value) return null;
     const parsed = new Date(value + 'T12:00:00');
     return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const getInclusiveDaysBetween = (startValue: string, endValue: string): number | null => {
+    const start = parseDateValue(startValue);
+    const end = parseDateValue(endValue);
+    if (!start || !end) return null;
+    if (end < start) return null;
+
+    const millisecondsPerDay = 1000 * 60 * 60 * 24;
+    return Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay) + 1;
   };
 
   const getDateRange = (payload: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>): { start: Date; end: Date } | null => {
@@ -484,6 +500,21 @@ const PermitForm: React.FC<PermitFormProps> = ({
         setFormError('La fecha de término no puede ser anterior a la fecha de inicio.');
         setErrors({ ...newErrors, fechaTermino: 'Rango inválido' });
         return;
+      }
+
+      if (formData.fechaInicio && formData.fechaTermino) {
+        const expectedDays = getInclusiveDaysBetween(formData.fechaInicio, formData.fechaTermino);
+        if (!expectedDays) {
+          setFormError('No se pudo calcular el rango entre fecha de inicio y fecha de término.');
+          setErrors({ ...newErrors, fechaTermino: 'Rango inválido' });
+          return;
+        }
+
+        if (Number(formData.cantidadDias) !== expectedDays) {
+          setFormError(`Los días solicitados deben coincidir con el rango de fechas. Del ${formData.fechaInicio} al ${formData.fechaTermino} corresponden ${expectedDays} día(s).`);
+          setErrors({ ...newErrors, cantidadDias: 'No coincide con rango' });
+          return;
+        }
       }
 
       if (saldoP1 < 0 || (hasPeriod2 && saldoP2 < 0)) {
@@ -691,21 +722,36 @@ const PermitForm: React.FC<PermitFormProps> = ({
                 </div>
               </div>
 
-              {/* RUT */}
-              <div className="md:col-span-4">
-                <label className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-2 block">
-                  RUT {errors.rut && <span className="text-red-500 ml-2">• {errors.rut}</span>}
-                </label>
-                <div className="relative">
-                  <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 dark:text-slate-600" />
+              {/* RUT y Departamento */}
+              <div className="md:col-span-4 space-y-4">
+                <div>
+                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-2 block">
+                    RUT {errors.rut && <span className="text-red-500 ml-2">• {errors.rut}</span>}
+                  </label>
+                  <div className="relative">
+                    <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 dark:text-slate-600" />
+                    <input
+                      readOnly
+                      value={formData.rut || '00.000.000-0'}
+                      className={`w-full pl-12 pr-10 py-4 bg-slate-100 dark:bg-slate-700/50 border rounded-xl font-mono font-bold text-slate-500 dark:text-slate-400 outline-none text-sm ${errors.rut ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
+                    />
+                    {formData.rut && isValidRutModulo11(formData.rut) && (
+                      <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-2 block">
+                    Departamento
+                  </label>
                   <input
-                    readOnly
-                    value={formData.rut || '00.000.000-0'}
-                    className={`w-full pl-12 pr-10 py-4 bg-slate-100 dark:bg-slate-700/50 border rounded-xl font-mono font-bold text-slate-500 dark:text-slate-400 outline-none text-sm ${errors.rut ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
+                    name="departamento"
+                    value={formData.departamento || ''}
+                    onChange={handleChange}
+                    placeholder="Área o Unidad"
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl font-bold text-slate-700 dark:text-slate-200 text-sm outline-none focus:border-indigo-500"
                   />
-                  {formData.rut && isValidRutModulo11(formData.rut) && (
-                    <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                  )}
                 </div>
               </div>
             </div>
@@ -898,7 +944,13 @@ const PermitForm: React.FC<PermitFormProps> = ({
                       className={`w-full bg-white dark:bg-slate-700 border px-4 py-3 rounded-xl font-bold text-slate-800 dark:text-white outline-none focus:border-amber-500 text-sm ${errors.fechaTermino ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                     />
                     {formData.fechaTermino && (
-                      <p className="mt-1 text-[10px] font-bold text-emerald-600">{getDayName(formData.fechaTermino)}</p>
+                      <p className="mt-1 text-[10px] font-bold text-emerald-600">
+                        {getDayName(formData.fechaTermino)}
+                        {formData.fechaInicio && (() => {
+                          const expectedDays = getInclusiveDaysBetween(formData.fechaInicio, formData.fechaTermino);
+                          return expectedDays ? ` · Rango: ${expectedDays} día(s)` : '';
+                        })()}
+                      </p>
                     )}
                   </div>
 

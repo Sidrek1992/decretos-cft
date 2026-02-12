@@ -15,7 +15,7 @@ import OperationalOverview from './components/OperationalOverview';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Lazy load heavy modals for better initial performance
-const EmployeeListModal = lazy(() => import('./components/EmployeeListModal'));
+const EmployeeManagement = lazy(() => import('./components/EmployeeManagement'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const LowBalanceModal = lazy(() => import('./components/LowBalanceModal'));
 const DecreeBookModal = lazy(() => import('./components/DecreeBookModal'));
@@ -54,7 +54,7 @@ import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
   Database, CheckCircle, Users, AlertCircle, Moon, Sun, Undo2, Keyboard, CalendarDays, Palette, Printer, LogOut, Settings,
-  Menu, X, ChevronDown, ChevronRight, Zap, Shield, Eye
+  Menu, X, ChevronDown, ChevronRight, Zap, Shield, Eye, FileText, AlertTriangle
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,9 @@ interface MobileMenuProps {
   onUndo: () => void;
   canUndo: boolean;
   onToggleDashboard: () => void;
-  showDashboard: boolean;
+  onNavigateDecretos: () => void;
+  onNavigatePersonal: () => void;
+  currentView: 'decretos' | 'dashboard' | 'personal';
   onOpenDecreeBook: () => void;
   onOpenCalendar: () => void;
   onOpenEmployeeList: () => void;
@@ -103,7 +105,9 @@ const MobileMenu: React.FC<MobileMenuProps> = ({
   onUndo,
   canUndo,
   onToggleDashboard,
-  showDashboard,
+  onNavigateDecretos,
+  onNavigatePersonal,
+  currentView,
   onOpenDecreeBook,
   onOpenCalendar,
   onOpenEmployeeList,
@@ -154,10 +158,11 @@ const MobileMenu: React.FC<MobileMenuProps> = ({
       icon: <Eye className="w-4 h-4" />,
       gradient: 'from-indigo-500 to-purple-500',
       items: [
-        { label: 'Dashboard', icon: <BarChart3 className="w-5 h-5" />, action: onToggleDashboard, active: showDashboard, color: 'text-indigo-600 dark:text-indigo-400' },
+        { label: 'Inicio', icon: <LayoutDashboard className="w-5 h-5" />, action: onToggleDashboard, active: currentView === 'dashboard', color: 'text-indigo-600 dark:text-indigo-400' },
+        { label: 'Decretos', icon: <FileText className="w-5 h-5" />, action: onNavigateDecretos, active: currentView === 'decretos', color: 'text-indigo-600 dark:text-indigo-400' },
+        { label: 'Personal', icon: <Users className="w-5 h-5" />, action: onNavigatePersonal, active: currentView === 'personal', color: 'text-indigo-600 dark:text-indigo-400' },
         { label: 'Libro de Decretos', icon: <BookOpen className="w-5 h-5" />, action: onOpenDecreeBook, color: 'text-amber-600 dark:text-amber-400' },
         { label: 'Calendario', icon: <CalendarDays className="w-5 h-5" />, action: onOpenCalendar, color: 'text-sky-600 dark:text-sky-400' },
-        { label: `Personal (${employeesCount})`, icon: <Users className="w-5 h-5" />, action: onOpenEmployeeList, color: 'text-emerald-600 dark:text-emerald-400' },
       ]
     },
     {
@@ -366,7 +371,7 @@ const AppContent: React.FC = () => {
 
   const [editingRecord, setEditingRecord] = useState<PermitRecord | null>(null);
   const [activeTab, setActiveTab] = useState<SolicitudType | 'ALL'>('ALL');
-  const [showDashboard, setShowDashboard] = useState(false);
+  const [currentView, setCurrentView] = useState<'decretos' | 'dashboard' | 'personal'>('dashboard');
   const [searchFilter, setSearchFilter] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -582,7 +587,7 @@ const AppContent: React.FC = () => {
     { key: 'e', ctrlKey: true, action: handleExportData, description: 'Exportar Excel' },
     { key: 'd', ctrlKey: true, action: toggleDarkMode, description: 'Cambiar tema' },
     { key: 'b', ctrlKey: true, action: () => openModal('decreeBook'), description: 'Libro de decretos' },
-    { key: 'g', ctrlKey: true, action: () => setShowDashboard(p => !p), description: 'Ver gráficos' },
+    { key: 'g', ctrlKey: true, action: () => setCurrentView(p => p === 'dashboard' ? 'decretos' : 'dashboard'), description: 'Ver gráficos' },
     { key: 'c', ctrlKey: true, action: () => openModal('calendar'), description: 'Calendario' },
     { key: 'z', ctrlKey: true, action: handleUndo, description: 'Deshacer' },
     { key: 'k', ctrlKey: true, action: () => setCommandPaletteOpen(true), description: 'Buscar comandos' },
@@ -648,7 +653,6 @@ const AppContent: React.FC = () => {
   }, [profile, user]);
 
   const shouldHideSummaryCards =
-    showDashboard ||
     showAdminPanel ||
     modals.employeeList ||
     modals.decreeBook ||
@@ -805,8 +809,10 @@ const AppContent: React.FC = () => {
         onSync={() => fetchFromCloud()}
         onUndo={handleUndo}
         canUndo={canUndo}
-        onToggleDashboard={() => setShowDashboard(p => !p)}
-        showDashboard={showDashboard}
+        onToggleDashboard={() => setCurrentView('dashboard')}
+        onNavigateDecretos={() => setCurrentView('decretos')}
+        onNavigatePersonal={() => setCurrentView('personal')}
+        currentView={currentView}
         onOpenDecreeBook={() => openModal('decreeBook')}
         onOpenCalendar={() => openModal('calendar')}
         onOpenEmployeeList={() => openModal('employeeList')}
@@ -847,38 +853,54 @@ const AppContent: React.FC = () => {
 
                 <div className="p-1.5 space-y-1.5">
                   <button
-                    onClick={() => openModal('employeeList')}
-                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${modals.employeeList
-                      ? 'bg-emerald-50 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
-                      }`}
-                  >
-                    <div className={`p-1.5 rounded-lg ${modals.employeeList ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Gestión de personal</p>
-                      <p className="text-[10px] opacity-70 leading-tight">Funcionarios registrados</p>
-                    </div>
-                    <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-black bg-white/80 dark:bg-slate-700/80 border border-slate-200 dark:border-slate-600">
-                      {employees.length}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowDashboard(p => !p)}
-                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${showDashboard
+                    onClick={() => setCurrentView('dashboard')}
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${currentView === 'dashboard'
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       }`}
                   >
-                    <div className={`p-1.5 rounded-lg ${showDashboard ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                      <BarChart3 className="w-4 h-4" />
+                    <div className={`p-1.5 rounded-lg ${currentView === 'dashboard' ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <LayoutDashboard className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Dashboard</p>
-                      <p className="text-[10px] opacity-70 leading-tight">Estadísticas y analítica</p>
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Inicio</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Resumen y Analítica</p>
                     </div>
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentView('decretos')}
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${currentView === 'decretos'
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      }`}
+                  >
+                    <div className={`p-1.5 rounded-lg ${currentView === 'decretos' ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Decretos</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Emisión y Registro</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentView('personal')}
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-all duration-200 ${currentView === 'personal'
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+                      }`}
+                  >
+                    <div className={`p-1.5 rounded-lg ${currentView === 'personal' ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-black uppercase tracking-wide leading-tight">Personal</p>
+                      <p className="text-[10px] opacity-70 leading-tight">Funcionarios</p>
+                    </div>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-black bg-white/80 dark:bg-slate-700/80 border border-slate-200 dark:border-slate-600">
+                      {employees.length}
+                    </span>
                   </button>
 
                   <button
@@ -918,35 +940,35 @@ const AppContent: React.FC = () => {
           </aside>
 
           <div className="space-y-8 sm:space-y-10 min-w-0">
-            {/* Welcome Banner */}
-            <WelcomeBanner
-              userName={welcomeUserName}
-              totalRecords={records.length}
-              totalEmployees={employees.length}
-              criticalAlerts={notifications_criticalCount}
-              onClickDecrees={handleViewDecreesFromWelcome}
-              onClickEmployees={handleViewEmployeesFromWelcome}
-              onClickUrgent={handleViewUrgentFromWelcome}
-              isSyncing={isSyncing}
-              isOnline={isOnline}
-              lastSync={lastSync}
-              syncStatusDotClass={syncStatusDotClass}
-            />
-
-            {!shouldHideSummaryCards && (
+            {currentView === 'dashboard' && (
               <>
-                <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
+                <WelcomeBanner
+                  userName={welcomeUserName}
+                  totalRecords={records.length}
+                  totalEmployees={employees.length}
+                  criticalAlerts={notifications_criticalCount}
+                  onClickDecrees={handleViewDecreesFromWelcome}
+                  onClickEmployees={handleViewEmployeesFromWelcome}
+                  onClickUrgent={handleViewUrgentFromWelcome}
+                  isSyncing={isSyncing}
+                  isOnline={isOnline}
+                  lastSync={lastSync}
+                  syncStatusDotClass={syncStatusDotClass}
+                />
+
                 <OperationalOverview records={records} variant="compact" />
               </>
             )}
 
+            {currentView === 'decretos' && !shouldHideSummaryCards && (
+              <>
+                <StatsCards records={records} totalDatabaseEmployees={employees.length} employees={employees} />
+              </>
+            )}
+
             {/* Dashboard condicional (lazy loaded) */}
-            {showDashboard && (
-              <Suspense fallback={
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 animate-pulse">
-                  <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded-xl" />
-                </div>
-              }>
+            {currentView === 'dashboard' && (
+              <Suspense fallback={<ModalLoader />}>
                 <Dashboard
                   records={records}
                   employees={employees}
@@ -954,127 +976,138 @@ const AppContent: React.FC = () => {
               </Suspense>
             )}
 
-            <div className="space-y-10 sm:space-y-12">
-              {/* Formulario - Solo para administradores */}
-              {permissions.canCreateDecree && (
-                <section ref={formRef}>
-                  <PermitForm
-                    onSubmit={handleSubmit}
-                    editingRecord={editingRecord}
-                    onCancelEdit={() => setEditingRecord(null)}
-                    nextCorrelatives={nextCorrelatives}
-                    employees={employees}
-                    records={records}
-                    requestedSolicitudType={requestedSolicitudType}
-                    onRequestedSolicitudTypeHandled={() => setRequestedSolicitudType(null)}
+            {/* Gestión de Personal (NUEVA PESTAÑA) */}
+            {currentView === 'personal' && (
+              <Suspense fallback={<ModalLoader />}>
+                <EmployeeManagement
+                  employees={employees}
+                  records={records}
+                  onAddEmployee={permissions.canManageEmployees ? handleAddEmployee : undefined}
+                  onUpdateEmployee={permissions.canManageEmployees ? handleUpdateEmployee : undefined}
+                  onDeleteEmployee={permissions.canManageEmployees ? handleDeleteEmployee : undefined}
+                  onFilterByEmployee={(nombre) => {
+                    setCurrentView('decretos');
+                    setSearchFilter(nombre);
+                  }}
+                  onQuickDecree={(emp) => {
+                    setCurrentView('decretos');
+                    // El formulario se desplazará automáticamente o podemos forzarlo
+                    // handleQuickDecree ya pone el funcionario si existiera pero aquí simplemente cambiamos de vista
+                    setSearchFilter(emp.nombre);
+                  }}
+                />
+              </Suspense>
+            )}
+
+            {currentView === 'decretos' && (
+              <div className="space-y-10 sm:space-y-12">
+                {/* Formulario - Solo para administradores */}
+                {permissions.canCreateDecree && (
+                  <section ref={formRef}>
+                    <PermitForm
+                      onSubmit={handleSubmit}
+                      editingRecord={editingRecord}
+                      onCancelEdit={() => setEditingRecord(null)}
+                      nextCorrelatives={nextCorrelatives}
+                      employees={employees}
+                      records={records}
+                      requestedSolicitudType={requestedSolicitudType}
+                      onRequestedSolicitudTypeHandled={() => setRequestedSolicitudType(null)}
+                    />
+                  </section>
+                )}
+
+                {/* Mensaje para lectores */}
+                {!permissions.canCreateDecree && (
+                  <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-6">
+                    <div className="flex items-center gap-3">
+                      <div className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
+                        {roleLabel}
+                      </div>
+                      <p className="text-sm text-sky-700 dark:text-sky-300">
+                        Tu rol es de <strong>lectura</strong>. Puedes consultar los registros y generar documentos PDF, pero no crear ni modificar decretos.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tabla */}
+                <section className="space-y-6 sm:space-y-8">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/50">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                          Registro de Decretos
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                            Historial Institucional
+                          </span>
+                          {lastSync && !isSyncing && (
+                            <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 rounded-full text-[8px] font-black uppercase tracking-tighter">
+                              <CheckCircle className="w-2.5 h-2.5" /> Sincronizado
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 hidden sm:flex items-center gap-2">
+                          {(['PA', 'FL'] as const).map((module) => (
+                            <button
+                              key={module}
+                              onClick={() => fetchModuleFromCloud(module)}
+                              className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-colors ${moduleSync[module].status === 'error'
+                                ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+                                : moduleSync[module].status === 'syncing'
+                                  ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-800'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                                }`}
+                              title={moduleSync[module].lastError || `Reintentar sincronización ${module}`}
+                            >
+                              {module} {moduleSync[module].status === 'syncing' ? '...' : 'sync'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tabs de filtro */}
+                    <div className="flex bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur p-1.5 rounded-2xl gap-1 border border-slate-200/50 dark:border-slate-700 shadow-inner w-full sm:w-auto">
+                      {(['ALL', 'PA', 'FL'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTab(tab)}
+                          className={`flex-1 sm:flex-none px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black tracking-wider sm:tracking-widest transition-all duration-300 uppercase ${activeTab === tab
+                            ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md ring-1 ring-slate-200 dark:ring-slate-600'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                            }`}
+                        >
+                          {tab === 'ALL' ? 'Todos' : tab === 'PA' ? 'Permisos' : 'Feriados'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <PermitTable
+                    data={records}
+                    activeTab={activeTab}
+                    onDelete={handleDelete}
+                    onEdit={setEditingRecord}
+                    searchTerm={searchFilter}
+                    onSearchTermChange={setSearchFilter}
+                    canEdit={permissions.canEditDecree}
+                    canDelete={permissions.canDeleteDecree}
                   />
                 </section>
-              )}
-
-              {/* Mensaje para lectores */}
-              {!permissions.canCreateDecree && (
-                <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-2xl p-6">
-                  <div className="flex items-center gap-3">
-                    <div className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${roleColors.bg} ${roleColors.text}`}>
-                      {roleLabel}
-                    </div>
-                    <p className="text-sm text-sky-700 dark:text-sky-300">
-                      Tu rol es de <strong>lectura</strong>. Puedes consultar los registros y generar documentos PDF, pero no crear ni modificar decretos.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Tabla */}
-              <section className="space-y-6 sm:space-y-8">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/50">
-                      <LayoutDashboard className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                        Registro de Decretos
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                          Historial Institucional
-                        </span>
-                        {lastSync && !isSyncing && (
-                          <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 rounded-full text-[8px] font-black uppercase tracking-tighter">
-                            <CheckCircle className="w-2.5 h-2.5" /> Sincronizado
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 hidden sm:flex items-center gap-2">
-                        {(['PA', 'FL'] as const).map((module) => (
-                          <button
-                            key={module}
-                            onClick={() => fetchModuleFromCloud(module)}
-                            className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-colors ${moduleSync[module].status === 'error'
-                              ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
-                              : moduleSync[module].status === 'syncing'
-                                ? 'bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-800'
-                                : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                              }`}
-                            title={moduleSync[module].lastError || `Reintentar sincronización ${module}`}
-                          >
-                            {module} {moduleSync[module].status === 'syncing' ? '...' : 'sync'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tabs de filtro */}
-                  <div className="flex bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur p-1.5 rounded-2xl gap-1 border border-slate-200/50 dark:border-slate-700 shadow-inner w-full sm:w-auto">
-                    {(['ALL', 'PA', 'FL'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`flex-1 sm:flex-none px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-[11px] font-black tracking-wider sm:tracking-widest transition-all duration-300 uppercase ${activeTab === tab
-                          ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md ring-1 ring-slate-200 dark:ring-slate-600'
-                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                          }`}
-                      >
-                        {tab === 'ALL' ? 'Todos' : tab === 'PA' ? 'Permisos' : 'Feriados'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <PermitTable
-                  data={records}
-                  activeTab={activeTab}
-                  onDelete={handleDelete}
-                  onEdit={setEditingRecord}
-                  searchTerm={searchFilter}
-                  onSearchTermChange={setSearchFilter}
-                  canEdit={permissions.canEditDecree}
-                  canDelete={permissions.canDeleteDecree}
-                />
-              </section>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
 
-      {/* Modal de empleados (lazy loaded) */}
-      {modals.employeeList && (
-        <Suspense fallback={<ModalLoader />}>
-          <EmployeeListModal
-            isOpen={modals.employeeList}
-            onClose={() => closeModal('employeeList')}
-            employees={employees}
-            records={records}
-            onAddEmployee={permissions.canManageEmployees ? handleAddEmployee : undefined}
-            onUpdateEmployee={permissions.canManageEmployees ? handleUpdateEmployee : undefined}
-            onDeleteEmployee={permissions.canManageEmployees ? handleDeleteEmployee : undefined}
-            onFilterByEmployee={handleFilterByEmployee}
-            onQuickDecree={permissions.canCreateDecree ? handleQuickDecree : undefined}
-          />
-        </Suspense>
-      )}
+      {/* Modales eliminados o mantenidos */}
+
 
       {/* Modal saldo bajo (lazy loaded) */}
       {modals.lowBalance && (
@@ -1112,6 +1145,7 @@ const AppContent: React.FC = () => {
             isOpen={modals.calendar}
             onClose={() => closeModal('calendar')}
             records={records}
+            employees={employees}
           />
         </Suspense>
       )}
@@ -1145,11 +1179,11 @@ const AppContent: React.FC = () => {
         employees={employees}
         onNavigate={(view) => {
           if (view === 'dashboard') {
-            setShowDashboard(true);
+            setCurrentView('dashboard');
+          } else if (view === 'personal') {
+            setCurrentView('personal');
           } else if (view === 'calendar') {
             openModal('calendar');
-          } else if (view === 'employees') {
-            openModal('employeeList');
           } else if (view === 'settings') {
             if (role === 'admin') {
               setShowAdminPanel(true);

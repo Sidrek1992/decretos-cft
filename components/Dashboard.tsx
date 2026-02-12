@@ -578,7 +578,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
     const handleExportPDF = async () => {
         setIsExporting(true);
         try {
-            await exportDashboardToPDF('dashboard-content', 'Reporte GDP Cloud - Dashboard Analytics');
+            await exportDashboardToPDF('dashboard-content', 'Reporte GDP Cloud - Resumen de Gestión');
         } catch (error) {
             console.error('Error al exportar Dashboard:', error);
         } finally {
@@ -995,7 +995,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                         <TrendingUp className="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-black text-slate-900 dark:text-white">Panel de Analytics</h2>
+                        <h2 className="text-lg font-black text-slate-900 dark:text-white">Resumen de Gestión</h2>
                         <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                             {periodLabel}
                         </p>
@@ -1118,7 +1118,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                 />
             )}
 
-            <OperationalOverview records={records} />
+
 
             {/* ─── Gráficos principales: Area (tendencia) + Pie (distribución) ─── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
