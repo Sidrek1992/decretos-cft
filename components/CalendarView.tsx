@@ -107,6 +107,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
         const nextWeekStr = nextWeek.toISOString().split('T')[0];
 
         const onLeaveToday: PermitRecord[] = [];
+        const startsToday: PermitRecord[] = [];
         const upcomingNextWeek: PermitRecord[] = [];
 
         // Usar filteredRecords para que el panel lateral también se filtre al buscar
@@ -125,12 +126,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
             const startStr = start.toISOString().split('T')[0];
             const endStr = end.toISOString().split('T')[0];
 
-            // Hoy
+            // Inician Hoy
+            if (startStr === todayStr) {
+                startsToday.push(r);
+            }
+
+            // En curso Hoy (incluye los que inician hoy)
             if (todayStr >= startStr && todayStr <= endStr) {
                 onLeaveToday.push(r);
             }
 
-            // Próxima semana
+            // Próxima semana (a partir de mañana)
             const tomorrow = new Date(now);
             tomorrow.setDate(now.getDate() + 1);
             const tomorrowStr = tomorrow.toISOString().split('T')[0];
@@ -140,7 +146,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
             }
         });
 
-        return { onLeaveToday, upcomingNextWeek };
+        return { onLeaveToday, startsToday, upcomingNextWeek };
     }, [filteredRecords]);
 
     // Resumen mensual (respetando depto)
@@ -224,10 +230,38 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                             <div className="p-6 space-y-8">
 
 
-                                {/* Today's Status */}
+                                {/* Inician Hoy */}
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">En Vacaciones Hoy</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Inician Hoy</p>
+                                        </div>
+                                        <span className="text-[10px] font-black bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full">
+                                            {insights.startsToday.length}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {insights.startsToday.length > 0 ? insights.startsToday.map(r => (
+                                            <div key={r.id} className="p-3 bg-white dark:bg-slate-800 rounded-xl border-l-4 border-l-indigo-500 border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+                                                <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase truncate group-hover:text-indigo-600">{r.funcionario}</p>
+                                                <div className="flex items-center justify-between mt-1">
+                                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${r.solicitudType === 'PA' ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-500'}`}>{r.solicitudType === 'PA' ? 'Permiso Admin.' : 'Feriado Legal'}</span>
+                                                    <span className="text-[9px] font-black text-slate-400">+{r.cantidadDias}d</span>
+                                                </div>
+                                            </div>
+                                        )) : (
+                                            <div className="py-4 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                                                <p className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">Sin inicios hoy</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Today's Status (En curso) */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ausentes / En curso Hoy</p>
                                         <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full">
                                             {insights.onLeaveToday.length}
                                         </span>
@@ -235,9 +269,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                     <div className="space-y-2">
                                         {insights.onLeaveToday.length > 0 ? insights.onLeaveToday.map(r => (
                                             <div key={r.id} className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:border-indigo-200 transition-colors group">
-                                                <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase truncate group-hover:text-indigo-600">{r.funcionario}</p>
-                                                <div className="flex items-center gap-2 mt-0.5">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase truncate group-hover:text-indigo-600">{r.funcionario}</p>
+                                                    {insights.startsToday.some(s => s.id === r.id) && (
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${r.solicitudType === 'PA' ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-500'}`}>{r.solicitudType}</span>
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight italic">
+                                                        {r.fechaInicio === new Date().toISOString().split('T')[0] ? 'Inicia hoy' : 'En curso'}
+                                                    </span>
                                                 </div>
                                             </div>
                                         )) : (
