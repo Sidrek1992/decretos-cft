@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     X,
@@ -20,9 +21,12 @@ import {
     FileText,
     ArrowRight,
     Search as SearchIcon,
-    Filter
+    Filter,
+    ShieldCheck
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { PermitRecord, Employee } from '../types';
+import DataAuditorView from './DataAuditorView';
 import { UserRole, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
 import {
     loadUserRoles,
@@ -42,6 +46,9 @@ import { subscribeToProfileChanges } from '../services/realtimeSync';
 interface AdminPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    records: PermitRecord[];
+    employees?: Employee[];
+    onSelectRecord?: (record: PermitRecord) => void;
 }
 
 interface ManagedUser {
@@ -73,7 +80,7 @@ export const isAdminEmail = (email: string): boolean => {
     return getUserRole(email) === 'admin';
 };
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, employees = [], onSelectRecord }) => {
     const [users, setUsers] = useState<ManagedUser[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -90,7 +97,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [profileDrafts, setProfileDrafts] = useState<Record<string, { firstName: string; lastName: string }>>({});
     const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
     const [showPasswordByEmail, setShowPasswordByEmail] = useState<Record<string, boolean>>({});
-    const [activeTab, setActiveTab] = useState<'users' | 'audit'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'audit' | 'data_audit'>('users');
     const [remoteAuditLogs, setRemoteAuditLogs] = useState<AuditEntry[]>([]);
     const [isLoadingAudit, setIsLoadingAudit] = useState(false);
     const [auditSearch, setAuditSearch] = useState('');
@@ -543,11 +550,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-5 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                            <Settings className="w-5 h-5 text-white" />
+                            <ShieldAlert className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-black text-white">Panel de Administración</h2>
-                            <p className="text-xs text-white/70">Gestión de usuarios y auditoría</p>
+                            <h2 className="text-lg font-black text-white">Panel de Control IT</h2>
+                            <p className="text-xs text-white/70">Gestión de seguridad y datos</p>
                         </div>
                     </div>
                     <button
@@ -568,7 +575,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             }`}
                     >
                         <Users size={14} />
-                        Gestión de Usuarios
+                        Usuarios
                     </button>
                     <button
                         onClick={() => setActiveTab('audit')}
@@ -578,7 +585,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             }`}
                     >
                         <History size={14} />
-                        Auditoría y Versiones
+                        Historial
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('data_audit')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === 'data_audit'
+                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-700'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            }`}
+                    >
+                        <ShieldCheck size={14} />
+                        Auditor Datos
                     </button>
                 </div>
 
@@ -586,324 +603,171 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 <div className="flex-1 overflow-y-auto p-6 pt-0 space-y-6 custom-scrollbar">
                     {activeTab === 'users' ? (
                         <>
-                            {/* Alerts */}
+                            {/* ALERTS */}
                             {error && (
                                 <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-3">
-                                    <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                                     <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-                                    <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
-                                        <X size={16} />
-                                    </button>
                                 </div>
                             )}
-
                             {success && (
                                 <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-start gap-3">
-                                    <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                                    <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                                     <p className="text-sm text-emerald-700 dark:text-emerald-400">{success}</p>
-                                    <button onClick={() => setSuccess(null)} className="ml-auto text-emerald-400 hover:text-emerald-600">
-                                        <X size={16} />
-                                    </button>
                                 </div>
                             )}
 
-                            {/* Crear nuevo usuario */}
+                            {/* CREAR USUARIO */}
                             <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-5 border border-slate-200 dark:border-slate-700">
                                 <div className="flex items-center gap-2 mb-4">
-                                    <UserPlus className="w-5 h-5 text-indigo-500" />
-                                    <h3 className="font-black text-slate-900 dark:text-white">Crear Nuevo Usuario</h3>
+                                    <UserPlus className="w-4 h-4 text-indigo-500" />
+                                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Crear Nuevo Usuario</h3>
                                 </div>
-
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                            Nombre
-                                        </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Nombre"
+                                        value={createFirstName}
+                                        onChange={(e) => setCreateFirstName(e.target.value)}
+                                        className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="Apellido"
+                                        value={createLastName}
+                                        onChange={(e) => setCreateLastName(e.target.value)}
+                                        className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input
-                                            type="text"
-                                            value={createFirstName}
-                                            onChange={(e) => setCreateFirstName(e.target.value)}
-                                            placeholder="Ej: Juan"
-                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            type="email"
+                                            placeholder="Email"
+                                            value={createEmail}
+                                            onChange={(e) => setCreateEmail(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                                         />
                                     </div>
-
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                            Apellido
-                                        </label>
+                                    <div className="relative">
+                                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input
-                                            type="text"
-                                            value={createLastName}
-                                            onChange={(e) => setCreateLastName(e.target.value)}
-                                            placeholder="Ej: Perez"
-                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            type={showCreatePassword ? 'text' : 'password'}
+                                            placeholder="Contraseña"
+                                            value={createPassword}
+                                            onChange={(e) => setCreatePassword(e.target.value)}
+                                            className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                                         />
+                                        <button
+                                            onClick={() => setShowCreatePassword(!showCreatePassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                        >
+                                            {showCreatePassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                                        </button>
                                     </div>
+                                    <select
+                                        value={createRole}
+                                        onChange={(e) => setCreateRole(e.target.value as UserRole)}
+                                        className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                    >
+                                        <option value="reader">Lector</option>
+                                        <option value="editor">Editor</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                    <button
+                                        onClick={handleCreateUser}
+                                        disabled={isCreating}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
+                                    >
+                                        {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus size={16} />}
+                                        Crear
+                                    </button>
+                                </div>
+                            </div>
 
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                            Email
-                                        </label>
-                                        <div className="relative">
-                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <input
-                                                type="email"
-                                                value={createEmail}
-                                                onChange={(e) => setCreateEmail(e.target.value)}
-                                                placeholder="usuario@email.com"
-                                                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 outline-none"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                            Contraseña
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                type={showCreatePassword ? 'text' : 'password'}
-                                                value={createPassword}
-                                                onChange={(e) => setCreatePassword(e.target.value)}
-                                                placeholder="Mínimo 6 caracteres"
-                                                className="w-full pl-4 pr-11 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 outline-none"
-                                            />
+                            {/* LISTA DE USUARIOS */}
+                            <div className="space-y-4">
+                                {users.map((user) => (
+                                    <div key={user.email} className="p-4 bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm space-y-4">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${user.role === 'admin' ? 'bg-purple-100 dark:bg-purple-900/20' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                                                    {user.role === 'admin' ? <Crown className="w-5 h-5 text-purple-600" /> : <Users className="w-5 h-5 text-slate-500" />}
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-slate-900 dark:text-white">{user.firstName} {user.lastName}</p>
+                                                    <p className="text-xs text-slate-500">{user.email}</p>
+                                                </div>
+                                            </div>
                                             <button
-                                                type="button"
-                                                onClick={() => setShowCreatePassword((prev) => !prev)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                onClick={() => handleRemoveUser(user.email)}
+                                                className="p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                             >
-                                                {showCreatePassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <select
+                                                value={user.role}
+                                                onChange={(e) => handleChangeRole(user.email, e.target.value as UserRole)}
+                                                className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-black uppercase"
+                                            >
+                                                <option value="reader">Lector</option>
+                                                <option value="editor">Editor</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                            <button
+                                                onClick={() => handleResetPassword(user.email)}
+                                                className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 text-xs font-black uppercase rounded-xl"
+                                                disabled={isResettingByEmail[user.email]}
+                                            >
+                                                Reset Password
                                             </button>
                                         </div>
                                     </div>
-
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                            Rol
-                                        </label>
-                                        <select
-                                            value={createRole}
-                                            onChange={(e) => setCreateRole(e.target.value as UserRole)}
-                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        >
-                                            <option value="reader">Lector</option>
-                                            <option value="editor">Editor</option>
-                                            <option value="admin">Administrador</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-end">
-                                        <button
-                                            onClick={handleCreateUser}
-                                            disabled={isCreating}
-                                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-center gap-2"
-                                        >
-                                            {isCreating ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    Creando...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <UserPlus className="w-4 h-4" />
-                                                    Crear Usuario
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Lista de usuarios */}
-                            <div>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Users className="w-5 h-5 text-indigo-500" />
-                                    <h3 className="font-black text-slate-900 dark:text-white">Usuarios Registrados</h3>
-                                    <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-xs font-bold">
-                                        {users.length}
-                                    </span>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {users.map((user) => (
-                                        <div
-                                            key={user.email}
-                                            className="p-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3 shadow-sm"
-                                        >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${user.role === 'admin'
-                                                        ? 'bg-purple-100 dark:bg-purple-900/40'
-                                                        : 'bg-slate-100 dark:bg-slate-800'
-                                                        }`}>
-                                                        {user.role === 'admin' ? (
-                                                            <Crown className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                                                        ) : (
-                                                            <Eye className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                                                        )}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="font-black text-sm text-slate-900 dark:text-white truncate">
-                                                            {(user.firstName || user.lastName)
-                                                                ? `${user.firstName} ${user.lastName}`.trim()
-                                                                : 'Sin nombre configurado'}
-                                                        </p>
-                                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate -mt-0.5 font-medium">
-                                                            {user.email}
-                                                        </p>
-                                                        <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-1">
-                                                            <Clock3 className="w-3 h-3" />
-                                                            {user.lastAccessAt
-                                                                ? `Último acceso: ${new Date(user.lastAccessAt).toLocaleString('es-CL')}`
-                                                                : 'Sin accesos registrados'}
-                                                        </p>
-                                                        <span className={`inline-flex mt-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${ROLE_COLORS[user.role].bg} ${ROLE_COLORS[user.role].text}`}>
-                                                            {ROLE_LABELS[user.role]}
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex items-center gap-2">
-                                                    <select
-                                                        value={user.role}
-                                                        onChange={(e) => { void handleChangeRole(user.email, e.target.value as UserRole); }}
-                                                        disabled={isMandatoryAdminEmail(user.email)}
-                                                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-lg text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 disabled:opacity-50 outline-none focus:ring-2 focus:ring-indigo-500"
-                                                    >
-                                                        <option value="reader">Lector</option>
-                                                        <option value="editor">Editor</option>
-                                                        <option value="admin">Admin</option>
-                                                    </select>
-
-                                                    {!isMandatoryAdminEmail(user.email) && (
-                                                        <button
-                                                            onClick={() => handleRemoveUser(user.email)}
-                                                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                                                            title="Eliminar usuario"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                ))}
                             </div>
                         </>
-                    ) : (
-                        <div className="space-y-6">
-                            {/* Búsqueda de Auditoría */}
-                            <div className="flex items-center gap-3">
-                                <div className="relative flex-1">
-                                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        value={auditSearch}
-                                        onChange={(e) => setAuditSearch(e.target.value)}
-                                        placeholder="Buscar en el historial..."
-                                        className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-900/50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => void loadRemoteAudit()}
-                                    disabled={isLoadingAudit}
-                                    className={`p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-100 transition-colors ${isLoadingAudit ? 'animate-pulse' : ''}`}
-                                >
-                                    <History size={18} />
-                                </button>
+                    ) : activeTab === 'audit' ? (
+                        <div className="space-y-4">
+                            <div className="relative mb-4">
+                                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar en el historial..."
+                                    value={auditSearch}
+                                    onChange={(e) => setAuditSearch(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-900/50 border-none rounded-xl text-sm"
+                                />
                             </div>
-
-                            {/* Timeline de Auditoría */}
                             <div className="space-y-3">
                                 {remoteAuditLogs
-                                    .filter(entry => {
-                                        const search = auditSearch.toLowerCase();
-                                        return entry.actor.toLowerCase().includes(search) ||
-                                            entry.action.toLowerCase().includes(search) ||
-                                            (entry.target || '').toLowerCase().includes(search);
-                                    })
+                                    .filter(e => e.actor.toLowerCase().includes(auditSearch.toLowerCase()) || e.action.toLowerCase().includes(auditSearch.toLowerCase()))
                                     .map((entry) => (
-                                        <div
-                                            key={entry.id}
-                                            onClick={() => setSelectedAuditEntry(selectedAuditEntry?.id === entry.id ? null : entry)}
-                                            className={`p-4 rounded-2xl border transition-all cursor-pointer ${selectedAuditEntry?.id === entry.id
-                                                ? 'bg-indigo-50/50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 ring-1 ring-indigo-200 dark:ring-indigo-800'
-                                                : 'bg-white dark:bg-slate-900/50 border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'
-                                                }`}
-                                        >
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div className="flex gap-3 min-w-0">
-                                                    <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${entry.action.includes('create') ? 'bg-emerald-100 text-emerald-600' :
-                                                        entry.action.includes('delete') ? 'bg-red-100 text-red-600' :
-                                                            'bg-blue-100 text-blue-600'
-                                                        }`}>
-                                                        <FileText size={16} />
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/40 rounded-md">
-                                                                {entry.action}
-                                                            </span>
-                                                            <span className="text-[10px] font-bold text-slate-400">
-                                                                {new Date(entry.timestamp).toLocaleString('es-CL')}
-                                                            </span>
-                                                        </div>
-                                                        <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 mt-1 truncate">
-                                                            {entry.target || 'Acción de sistema'}
-                                                        </h4>
-                                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                                                            Por: <span className="font-bold text-slate-700 dark:text-slate-300">{entry.actor}</span>
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                {entry.old_data && (
-                                                    <div className="flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase tracking-tighter shrink-0">
-                                                        <ArrowRight size={10} />
-                                                        Versión
-                                                    </div>
-                                                )}
+                                        <div key={entry.id} className="p-4 bg-white dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 rounded-2xl">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md">
+                                                    {entry.action}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 font-bold">
+                                                    {new Date(entry.timestamp).toLocaleString('es-CL')}
+                                                </span>
                                             </div>
-
-                                            {/* Vista expandida con Diff */}
-                                            {selectedAuditEntry?.id === entry.id && (entry.old_data || entry.new_data) && (
-                                                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-top-2">
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                        {entry.old_data && (
-                                                            <div className="p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30">
-                                                                <p className="text-[9px] font-black text-red-600 uppercase mb-2">Original</p>
-                                                                <pre className="text-[10px] font-mono text-slate-600 dark:text-slate-400 overflow-x-auto custom-scrollbar">
-                                                                    {JSON.stringify(entry.old_data, null, 2)}
-                                                                </pre>
-                                                            </div>
-                                                        )}
-                                                        {entry.new_data && (
-                                                            <div className="p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
-                                                                <p className="text-[9px] font-black text-emerald-600 uppercase mb-2">Modificado</p>
-                                                                <pre className="text-[10px] font-mono text-slate-600 dark:text-slate-400 overflow-x-auto custom-scrollbar">
-                                                                    {JSON.stringify(entry.new_data, null, 2)}
-                                                                </pre>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl italic text-[11px] text-slate-500 dark:text-slate-400">
-                                                        {entry.details}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            <p className="text-xs font-black text-slate-800 dark:text-slate-100">{entry.target}</p>
+                                            <p className="text-[10px] text-slate-500 mt-1">Por: {entry.actor}</p>
+                                            {entry.details && <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-2 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg italic">{entry.details}</p>}
                                         </div>
                                     ))}
-
-                                {remoteAuditLogs.length === 0 && !isLoadingAudit && (
-                                    <div className="text-center py-12 opacity-30">
-                                        <History size={48} className="mx-auto mb-3" />
-                                        <p className="font-black uppercase tracking-widest text-xs">Sin registros de auditoría</p>
-                                    </div>
-                                )}
                             </div>
                         </div>
+                    ) : (
+                        <DataAuditorView
+                            records={records}
+                            employees={employees}
+                            onSelectRecord={(record) => {
+                                onClose();
+                                onSelectRecord?.(record);
+                            }}
+                        />
                     )}
                 </div>
             </div>

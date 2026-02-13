@@ -362,10 +362,33 @@ const AppContent: React.FC = () => {
     addEmployee: handleAddEmployee,
     updateEmployee: handleUpdateEmployee,
     deleteEmployee: handleDeleteEmployee,
-    fetchEmployeesFromCloud
+    fetchEmployeesFromCloud,
+    syncEmployeesToCloud
   } = useEmployeeSync(
     () => { }, // onSuccess silencioso para empleados
     (error) => console.warn('Error empleados:', error),
+    user?.email
+  );
+
+  const {
+    records,
+    setRecords,
+    isSyncing,
+    syncError,
+    lastSync,
+    isOnline,
+    syncWarnings,
+    pendingSync,
+    isRetryScheduled,
+    fetchFromCloud,
+    fetchModuleFromCloud,
+    syncToCloud,
+    undo,
+    canUndo,
+    moduleSync
+  } = useCloudSync(
+    () => toast.success('Sincronizado', 'Datos actualizados correctamente'),
+    (error) => toast.error('Error de sincronización', error),
     user?.email
   );
 
@@ -380,6 +403,22 @@ const AppContent: React.FC = () => {
   const [requestedSolicitudType, setRequestedSolicitudType] = useState<SolicitudType | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Auditor Data State - Ahora declarado DESPUÉS de records y employees
+  const auditIssues = useMemo(() => {
+    if (role !== 'admin') return [];
+    try {
+      const { auditRecords } = require('./utils/dataAuditor');
+      return auditRecords(records || [], employees || []);
+    } catch (e) {
+      console.error("Auditor error:", e);
+      return [];
+    }
+  }, [records, employees, role]);
+
+  const criticalIssuesCount = useMemo(() =>
+    Array.isArray(auditIssues) ? auditIssues.filter((i: any) => i.type === 'error').length : 0,
+    [auditIssues]);
+
   // Hook centralizado para modales
   const { modals, openModal, closeModal } = useModals();
 
@@ -387,28 +426,6 @@ const AppContent: React.FC = () => {
 
   const { isDark, toggle: toggleDarkMode } = useDarkMode();
   const { toasts, toast, removeToast } = useToast();
-
-  const {
-    records,
-    setRecords,
-    isSyncing,
-    syncError,
-    lastSync,
-    isOnline,
-    syncWarnings,
-    pendingSync,
-    isRetryScheduled,
-    moduleSync,
-    fetchFromCloud,
-    fetchModuleFromCloud,
-    syncToCloud,
-    undo,
-    canUndo
-  } = useCloudSync(
-    () => toast.success('Sincronizado', 'Datos actualizados correctamente'),
-    (error) => toast.error('Error de sincronización', error),
-    user?.email
-  );
 
   const lastWarningsRef = useRef('');
 
@@ -774,10 +791,15 @@ const AppContent: React.FC = () => {
               {role === 'admin' && (
                 <button
                   onClick={() => setShowAdminPanel(true)}
-                  className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="relative p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-all duration-200 hover:scale-105 active:scale-95"
                   title="Panel de Administración"
                 >
                   <Settings className="w-5 h-5" />
+                  {criticalIssuesCount > 0 && (
+                    <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black flex items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                      {criticalIssuesCount > 9 ? '+9' : criticalIssuesCount}
+                    </span>
+                  )}
                 </button>
               )}
 
@@ -1179,6 +1201,15 @@ const AppContent: React.FC = () => {
       <AdminPanel
         isOpen={showAdminPanel}
         onClose={() => setShowAdminPanel(false)}
+        records={records}
+        employees={employees}
+        onSelectRecord={(record) => {
+          setEditingRecord(record);
+          setCurrentView('decretos');
+          setTimeout(() => {
+            formRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }}
       />
 
       {/* Command Palette */}
