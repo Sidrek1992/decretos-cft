@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { Employee, PermitRecord } from '../types';
+import { Employee, PermitRecord, SolicitudType } from '../types';
 import {
     X, Search, Users, UserCircle, TrendingUp, TrendingDown,
     Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp,
@@ -32,7 +32,7 @@ interface EmployeeManagementProps {
     onUpdateEmployee?: (oldRut: string, updatedEmployee: Employee) => void;
     onDeleteEmployee?: (rut: string) => void;
     onFilterByEmployee?: (funcionario: string) => void;
-    onQuickDecree?: (employee: Employee) => void;
+    onQuickDecree?: (employee: Employee, type: SolicitudType) => void;
 }
 
 type SortField = 'nombre' | 'totalDecrees' | 'diasPA' | 'diasFL' | 'saldo';
@@ -77,6 +77,7 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     const [showImportModal, setShowImportModal] = useState(false);
     const [importData, setImportData] = useState<Employee[]>([]);
     const [importRejected, setImportRejected] = useState<Array<{ nombre: string; rut: string; reason: string }>>([]);
+    const [quickDecreeType, setQuickDecreeType] = useState<SolicitudType>('PA');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const employeeStats = useMemo(() => {
@@ -572,14 +573,27 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                                                 </div>
 
                                                 {/* Botones de acción con estilo Decretos */}
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="flex flex-wrap items-center gap-3">
                                                     {onQuickDecree && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); onQuickDecree(emp); }}
-                                                            className="flex-1 min-w-[160px] flex items-center justify-center gap-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
-                                                        >
-                                                            <Plus size={16} /> Abrir Formulario Decreto
-                                                        </button>
+                                                        <div className="flex-1 min-w-[280px] flex items-stretch gap-2">
+                                                            <div className="relative flex-1">
+                                                                <select
+                                                                    value={quickDecreeType}
+                                                                    onChange={(e) => setQuickDecreeType(e.target.value as SolicitudType)}
+                                                                    className="w-full h-full pl-4 pr-10 py-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none cursor-pointer"
+                                                                >
+                                                                    <option value="PA">Permiso Adm. (PA)</option>
+                                                                    <option value="FL">Feriado Legal (FL)</option>
+                                                                </select>
+                                                                <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); onQuickDecree(emp, quickDecreeType); }}
+                                                                className="flex-[2] flex items-center justify-center gap-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                                                            >
+                                                                <Plus size={16} /> Iniciar Decreto
+                                                            </button>
+                                                        </div>
                                                     )}
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); startEdit(emp); }}

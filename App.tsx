@@ -530,14 +530,17 @@ const AppContent: React.FC = () => {
     openModal('employeeList');
   };
 
-  const handleQuickDecree = (employee: Employee) => {
+  const handleQuickDecree = (employee: Employee, type?: SolicitudType) => {
     // Preparar el formulario con el empleado seleccionado
     setSelectedEmployeeForForm(employee);
+    if (type) {
+      setRequestedSolicitudType(type);
+    }
     setCurrentView('decretos'); // El formulario está en la vista de decretos
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
-    toast.info('Nuevo decreto', `Preparando decreto para ${employee.nombre}`);
+    toast.info('Nuevo decreto', type ? `Preparando ${type === 'PA' ? 'Permiso Administrativo' : 'Feriado Legal'} para ${employee.nombre}` : `Preparando decreto para ${employee.nombre}`);
   };
 
   const handleViewDecreesFromWelcome = useCallback(() => {
