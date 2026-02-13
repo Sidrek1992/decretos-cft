@@ -77,9 +77,9 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({
     if (isDismissed) return null;
 
     return (
-        <div className={`relative overflow-hidden rounded-2xl p-5 page-fade-in ${isAnimating ? 'toast-exit' : ''}`}>
+        <div className={`relative overflow-hidden rounded-2xl p-5 glass-card page-fade-in ${isAnimating ? 'toast-exit' : ''}`}>
             {/* Background gradient */}
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-pink-500/5 dark:from-indigo-500/10 dark:via-purple-500/10 dark:to-pink-500/10" />
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/5 dark:from-indigo-500/10 dark:via-purple-500/5 dark:to-transparent" />
             <div className="absolute inset-0 border border-indigo-100/50 dark:border-indigo-800/30 rounded-2xl" />
 
             <div className="relative flex items-start justify-between gap-4">

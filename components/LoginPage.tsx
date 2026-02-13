@@ -47,25 +47,27 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
-            {/* Background decoration */}
-            <div className="absolute inset-0 overflow-hidden">
-                <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl" />
-                <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl" />
+        <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden">
+            {/* Background decoration - Enhanced Atmospheric Gradients */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-indigo-500/10 rounded-full blur-[120px]" />
+                <div className="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-purple-500/10 rounded-full blur-[120px]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-slate-900/40" />
             </div>
 
-            <div className="relative w-full max-w-md">
+            <div className="relative w-full max-w-md page-fade-in">
                 {/* Logo */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-2xl mb-4">
-                        <span className="text-2xl font-black text-white">GDP</span>
+                <div className="text-center mb-10">
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2.5rem] shadow-2xl mb-6 glow-primary relative">
+                        <div className="absolute inset-0 bg-white/20 rounded-[2.5rem] blur-xl opacity-0 hover:opacity-100 transition-opacity" />
+                        <span className="text-3xl font-black text-white relative z-10">GDP</span>
                     </div>
-                    <h1 className="text-2xl font-black text-white tracking-tight">GDP Cloud</h1>
-                    <p className="text-sm text-slate-400 mt-1">Sistema de Gestión de Decretos</p>
+                    <h1 className="text-3xl font-black text-white tracking-tight text-glow">GDP Cloud</h1>
+                    <p className="text-sm font-bold text-slate-500 dark:text-slate-500 uppercase tracking-[0.3em] mt-2">Sistema de Gestión</p>
                 </div>
 
                 {/* Card */}
-                <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl p-8">
+                <div className="glass-card rounded-[2.5rem] p-10 border-white/10">
                     <h2 className="text-xl font-black text-white mb-6 text-center">
                         {mode === 'login' && 'Iniciar Sesión'}
                         {mode === 'forgot' && 'Recuperar Contraseña'}

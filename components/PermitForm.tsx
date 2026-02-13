@@ -224,6 +224,14 @@ const PermitForm: React.FC<PermitFormProps> = ({
     const { name, value } = e.target;
     const numericFields = ['cantidadDias', 'diasHaber', 'saldoDisponibleP1', 'solicitadoP1', 'saldoDisponibleP2', 'solicitadoP2'];
     const newValue = numericFields.includes(name) ? Number(value) : value;
+
+    // Si cambia el nombre manualmente, invalidamos el RUT para forzar selección de la lista
+    if (name === 'funcionario') {
+      setFormData(prev => ({ ...prev, funcionario: String(newValue), rut: '' }));
+      setErrors(prev => ({ ...prev, funcionario: undefined, rut: undefined }));
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: newValue }));
     const error = validateField(name, newValue);
     setErrors(prev => ({ ...prev, [name]: error }));
@@ -256,12 +264,25 @@ const PermitForm: React.FC<PermitFormProps> = ({
           throw new Error(result.error || "No se pudo extraer información del PDF.");
         }
         const data = result.data;
-        setFormData(prev => ({
-          ...prev,
-          ...data,
-          funcionario: toProperCase(data.funcionario || ""),
-          rut: formatRut(data.rut || "")
-        }));
+        const scannedRut = normalizeRutCanonical(data.rut || "");
+        const matchedEmp = employees.find(e => normalizeRutCanonical(e.rut) === scannedRut);
+
+        if (matchedEmp) {
+          setFormData(prev => ({
+            ...prev,
+            ...data,
+            funcionario: toProperCase(matchedEmp.nombre),
+            rut: formatRutForStorage(matchedEmp.rut) || formatRut(matchedEmp.rut)
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            ...data,
+            funcionario: toProperCase(data.funcionario || ""),
+            rut: formatRut(data.rut || "")
+          }));
+          setFormError(`El RUT ${data.rut} escaneado no figura en la base de datos de funcionarios. Regístrelo antes de continuar.`);
+        }
       } else {
         // FL: 1 o 2 archivos (cada uno un período) — secuencial para evitar 503 por sobrecarga
         const fileArray = Array.from(files);
@@ -327,6 +348,19 @@ const PermitForm: React.FC<PermitFormProps> = ({
           saldoDisponibleP2: second?.saldoDisponible || 0,
           solicitadoP2: second?.solicitado || second?.cantidadDias || 0,
         }));
+
+        // Validar si el funcionario escaneado existe en la DB
+        const scannedRutFL = normalizeRutCanonical(first.rut || "");
+        const matchedEmpFL = employees.find(e => normalizeRutCanonical(e.rut) === scannedRutFL);
+        if (!matchedEmpFL) {
+          setFormError(`El funcionario escaneado (${first.rut}) no está en la base de datos. Verifique o regístrelo.`);
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            funcionario: toProperCase(matchedEmpFL.nombre),
+            rut: formatRutForStorage(matchedEmpFL.rut) || formatRut(matchedEmpFL.rut)
+          }));
+        }
 
         const scannedSaldo = typeof first.saldoDisponible === 'number' ? first.saldoDisponible : null;
         setDetectedSaldo(scannedSaldo);
@@ -475,10 +509,17 @@ const PermitForm: React.FC<PermitFormProps> = ({
     e.preventDefault();
     const newErrors: FormErrors = {};
     const normalizedRut = formatRutForStorage(formData.rut);
+    const employeeInDb = employees.find(e => normalizeRutCanonical(e.rut) === normalizeRutCanonical(formData.rut));
 
-    if (!formData.funcionario) newErrors.funcionario = 'Requerido';
-    if (!formData.rut) newErrors.rut = 'Requerido';
-    else if (!isValidRutModulo11(formData.rut) || !normalizedRut) newErrors.rut = 'RUT inválido';
+    if (!formData.funcionario) {
+      newErrors.funcionario = 'Requerido';
+    } else if (!formData.rut) {
+      newErrors.funcionario = 'Selección inválida';
+      setFormError('Debes seleccionar un funcionario de la lista oficial para obtener su RUT.');
+    } else if (!employeeInDb) {
+      newErrors.rut = 'No registrado';
+      setFormError(`El RUT ${formData.rut} no figura en la base de datos de funcionarios.`);
+    }
     if (!formData.fechaInicio) newErrors.fechaInicio = 'Requerido';
     else if (!validateDate(formData.fechaInicio)) newErrors.fechaInicio = 'Fecha inválida';
     else if (isNonWorkingDay(formData.fechaInicio)) newErrors.fechaInicio = 'Día inhábil';
@@ -729,7 +770,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
                     onChange={(e) => { handleChange(e); setShowSuggestions(true); }}
                     onFocus={() => setShowSuggestions(true)}
                     autoComplete="off"
-                    placeholder="NOMBRE O RUT PARA BUSCAR..."
+                    placeholder="BUSCAR FUNCIONARIO POR NOMBRE O RUT..."
                     className={`w-full pl-12 pr-12 py-4 bg-white dark:bg-slate-700 border rounded-xl font-black text-slate-800 dark:text-white uppercase focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/50 outline-none transition-all text-sm ${errors.funcionario ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                   />
                   <button type="button" onClick={() => setShowSuggestions(!showSuggestions)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600">

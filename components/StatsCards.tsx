@@ -83,11 +83,11 @@ const StatsCards: React.FC<StatsCardsProps> = React.memo(({ records, totalDataba
   }, [records, totalDatabaseEmployees, employees]);
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
       {stats.map((stat, i) => (
         <div
           key={i}
-          className={`bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl border ${stat.borderColor} shadow-sm flex items-center gap-3 sm:gap-4 transition-all hover:shadow-md group`}
+          className={`glass-card p-5 sm:p-6 rounded-[2rem] border ${stat.borderColor} flex items-center gap-4 transition-all hover:shadow-2xl hover:-translate-y-1 group`}
         >
           <div className={`${stat.bg} ${stat.color} p-2.5 sm:p-3 rounded-xl group-hover:scale-110 transition-transform`}>
             <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />

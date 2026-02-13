@@ -391,11 +391,11 @@ const PermitTable: React.FC<PermitTableProps> = ({
       />
 
       {/* Table Container */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl sm:rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="glass-card rounded-[2rem] shadow-2xl border-white/5 overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse table-auto">
             <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+              <tr className="bg-slate-50/50 dark:bg-slate-950/40 border-b border-slate-100 dark:border-white/5">
                 {/* ★ Checkbox para seleccionar todos */}
                 <th className="pl-4 sm:pl-6 py-4 sm:py-6 w-8">
                   <button

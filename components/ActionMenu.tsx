@@ -178,7 +178,7 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ record, onEdit, onDelete, onGen
                     maxHeight: menuPosition.maxHeight,
                     zIndex: 260,
                 }}
-                className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200 ${menuPosition.openUpwards ? 'origin-bottom-right' : 'origin-top-right'}`}
+                className={`glass-card border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200 ${menuPosition.openUpwards ? 'origin-bottom-right' : 'origin-top-right'}`}
             >
                 {actions.map((action, index) => (
                     <React.Fragment key={`${action.label}-${index}`}>
