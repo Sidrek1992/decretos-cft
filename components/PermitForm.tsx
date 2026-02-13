@@ -19,13 +19,12 @@ import {
   isValidRutModulo11,
   normalizeRutCanonical,
 } from '../utils/rutIntegrity';
+import { isWorkingDay, isHoliday, CHILEAN_HOLIDAYS } from '../utils/holidays';
 
-// Función para verificar si una fecha es fin de semana
-const isWeekend = (dateString: string): boolean => {
+// Función para verificar si una fecha es fin de semana o festivo
+const isNonWorkingDay = (dateString: string): boolean => {
   if (!dateString) return false;
-  const date = new Date(dateString + 'T12:00:00');
-  const day = date.getDay();
-  return day === 0 || day === 6;
+  return !isWorkingDay(dateString);
 };
 
 // Obtener nombre del día
@@ -377,14 +376,28 @@ const PermitForm: React.FC<PermitFormProps> = ({
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const getInclusiveDaysBetween = (startValue: string, endValue: string): number | null => {
+  const getInclusiveDaysBetween = (startValue: string, endValue: string, excludeNonWorking: boolean = true): number | null => {
     const start = parseDateValue(startValue);
     const end = parseDateValue(endValue);
     if (!start || !end) return null;
     if (end < start) return null;
 
-    const millisecondsPerDay = 1000 * 60 * 60 * 24;
-    return Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay) + 1;
+    if (!excludeNonWorking) {
+      const millisecondsPerDay = 1000 * 60 * 60 * 24;
+      return Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay) + 1;
+    }
+
+    // Contar solo días hábiles (excluye sábados, domingos y festivos)
+    let count = 0;
+    const current = new Date(start);
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      if (isWorkingDay(dateStr)) {
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return count;
   };
 
   const getDateRange = (payload: Pick<PermitRecord, 'solicitudType' | 'fechaInicio' | 'fechaTermino' | 'cantidadDias'>): { start: Date; end: Date } | null => {
@@ -397,9 +410,23 @@ const PermitForm: React.FC<PermitFormProps> = ({
     }
 
     if (!end || end < start) {
-      const days = Math.max(Math.ceil(payload.cantidadDias || 1), 1);
-      end = new Date(start);
-      end.setDate(start.getDate() + days - 1);
+      const targetDays = Math.max(payload.cantidadDias || 1, 0.5); // Soporte para medio día en PA
+      let daysCounted = 0;
+      let current = new Date(start);
+
+      // Bucle para encontrar el enésimo día hábil
+      // Si es 0.5 días, se cuenta como 1 para el rango de fechas (el día completo está ocupado)
+      const daysToCount = Math.ceil(targetDays);
+
+      while (daysCounted < daysToCount) {
+        if (isWorkingDay(current.toISOString().split('T')[0])) {
+          daysCounted++;
+        }
+        if (daysCounted < daysToCount) {
+          current.setDate(current.getDate() + 1);
+        }
+      }
+      end = current;
     }
 
     return { start, end };
@@ -454,7 +481,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
     else if (!isValidRutModulo11(formData.rut) || !normalizedRut) newErrors.rut = 'RUT inválido';
     if (!formData.fechaInicio) newErrors.fechaInicio = 'Requerido';
     else if (!validateDate(formData.fechaInicio)) newErrors.fechaInicio = 'Fecha inválida';
-    else if (isWeekend(formData.fechaInicio)) newErrors.fechaInicio = 'Fin de semana';
+    else if (isNonWorkingDay(formData.fechaInicio)) newErrors.fechaInicio = 'Día inhábil';
 
     if (!newErrors.rut && normalizedRut) {
       const identityConflict = findRutNameConflict(
@@ -555,10 +582,10 @@ const PermitForm: React.FC<PermitFormProps> = ({
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      const weekendError = newErrors.fechaInicio === 'Fin de semana';
+      const nonWorkingError = newErrors.fechaInicio === 'Día inhábil';
       const fechaTerminoError = newErrors.fechaTermino;
-      setFormError(weekendError
-        ? `El ${getDayName(formData.fechaInicio)} es fin de semana. Selecciona un día hábil.`
+      setFormError(nonWorkingError
+        ? `El ${getDayName(formData.fechaInicio)} es fin de semana o festivo. Selecciona un día hábil.`
         : fechaTerminoError
           ? 'La fecha de término es obligatoria para Feriado Legal.'
           : 'Por favor, corrige los campos marcados en rojo.');
@@ -832,8 +859,8 @@ const PermitForm: React.FC<PermitFormProps> = ({
                     className={`w-full bg-white dark:bg-slate-700 border px-4 py-3 rounded-xl font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-500 text-sm ${errors.fechaInicio ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                   />
                   {formData.fechaInicio && (
-                    <p className={`mt-1 text-[10px] font-bold ${isWeekend(formData.fechaInicio) ? 'text-red-500' : 'text-emerald-600'}`}>
-                      {getDayName(formData.fechaInicio)} {isWeekend(formData.fechaInicio) && '(Fin de semana)'}
+                    <p className={`mt-1 text-[10px] font-bold ${isNonWorkingDay(formData.fechaInicio) ? 'text-red-500' : 'text-emerald-600'}`}>
+                      {getDayName(formData.fechaInicio)} {isNonWorkingDay(formData.fechaInicio) && '(Inhábil)'}
                     </p>
                   )}
                 </div>
@@ -923,8 +950,8 @@ const PermitForm: React.FC<PermitFormProps> = ({
                       className={`w-full bg-white dark:bg-slate-700 border px-4 py-3 rounded-xl font-bold text-slate-800 dark:text-white outline-none focus:border-amber-500 text-sm ${errors.fechaInicio ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                     />
                     {formData.fechaInicio && (
-                      <p className={`mt-1 text-[10px] font-bold ${isWeekend(formData.fechaInicio) ? 'text-red-500' : 'text-emerald-600'}`}>
-                        {getDayName(formData.fechaInicio)}
+                      <p className={`mt-1 text-[10px] font-bold ${isNonWorkingDay(formData.fechaInicio) ? 'text-red-500' : 'text-emerald-600'}`}>
+                        {getDayName(formData.fechaInicio)} {isNonWorkingDay(formData.fechaInicio) && '(Inhábil)'}
                       </p>
                     )}
                   </div>
