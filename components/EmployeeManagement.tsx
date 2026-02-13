@@ -680,8 +680,9 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <p className="text-xs font-black text-slate-700 dark:text-slate-200 truncate leading-tight mb-1">{stats.lastDecree.acto}</p>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                                    {formatNumericDate(stats.lastDecree.fechaInicio)} · {stats.lastDecree.solicitudType}
+                                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                                    <span className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-[8px]">{stats.lastDecree.solicitudType}</span>
+                                                                    Inició el <span className="text-slate-900 dark:text-white">{formatNumericDate(stats.lastDecree.fechaInicio)}</span>
                                                                 </p>
                                                             </div>
                                                         </div>

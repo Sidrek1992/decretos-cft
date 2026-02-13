@@ -18,6 +18,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
 
 
     const [selectedDay, setSelectedDay] = useState<number | null>(null);
+    const [selectedRecord, setSelectedRecord] = useState<PermitRecord | null>(null);
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('todos');
     const [employeeSearch, setEmployeeSearch] = useState('');
     const [showInsights, setShowInsights] = useState(true);
@@ -243,7 +244,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                     </div>
                                     <div className="space-y-2">
                                         {insights.startsToday.length > 0 ? insights.startsToday.map(r => (
-                                            <div key={r.id} className="p-3 bg-white dark:bg-slate-800 rounded-xl border-l-4 border-l-indigo-500 border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+                                            <div
+                                                key={r.id}
+                                                onClick={() => {
+                                                    setSelectedRecord(r);
+                                                    setSelectedDay(null);
+                                                }}
+                                                className="p-3 bg-white dark:bg-slate-800 rounded-xl border-l-4 border-l-indigo-500 border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group cursor-pointer active:scale-[0.98]"
+                                            >
                                                 <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase truncate group-hover:text-indigo-600">{r.funcionario}</p>
                                                 <div className="flex items-center justify-between mt-1">
                                                     <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${r.solicitudType === 'PA' ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-500' : 'bg-amber-50 dark:bg-amber-900/40 text-amber-500'}`}>{r.solicitudType === 'PA' ? 'Permiso Admin.' : 'Feriado Legal'}</span>
@@ -268,7 +276,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                     </div>
                                     <div className="space-y-2">
                                         {insights.onLeaveToday.length > 0 ? insights.onLeaveToday.map(r => (
-                                            <div key={r.id} className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:border-indigo-200 transition-colors group">
+                                            <div
+                                                key={r.id}
+                                                onClick={() => {
+                                                    setSelectedRecord(r);
+                                                    setSelectedDay(null);
+                                                }}
+                                                className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:border-indigo-200 transition-colors group cursor-pointer active:scale-[0.98]"
+                                            >
                                                 <div className="flex items-center justify-between mb-1">
                                                     <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase truncate group-hover:text-indigo-600">{r.funcionario}</p>
                                                     {insights.startsToday.some(s => s.id === r.id) && (
@@ -420,8 +435,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                             onClick={() => {
                                                 if (hasRecords) {
                                                     setSelectedDay(isSelected ? null : day);
+                                                    setSelectedRecord(null);
                                                 } else {
                                                     setSelectedDay(null);
+                                                    setSelectedRecord(null);
                                                 }
                                             }}
                                             className={[
@@ -472,24 +489,29 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                         </div>
 
                         {/* ─── Panel de Detalles (Sliding Right Panel) ─── */}
-                        {selectedDay && (
+                        {(selectedDay || selectedRecord) && (
                             <div className="absolute top-0 right-0 bottom-0 w-full sm:w-96 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border-l border-slate-200 dark:border-slate-700 shadow-2xl z-[100] animate-in slide-in-from-right duration-300 flex flex-col">
                                 <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
                                     <div>
-                                        <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Decretos Registrados</h4>
+                                        <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">
+                                            {selectedRecord ? 'Detalle de Decreto' : 'Decretos Registrados'}
+                                        </h4>
                                         <p className="text-[10px] font-bold text-indigo-600 uppercase mt-1">
-                                            {selectedDay} de {monthNames[month]} de {year}
+                                            {selectedRecord
+                                                ? `Funcionario: ${selectedRecord.funcionario}`
+                                                : `${selectedDay} de ${monthNames[month]} de ${year}`
+                                            }
                                         </p>
                                     </div>
                                     <button
-                                        onClick={() => setSelectedDay(null)}
+                                        onClick={() => { setSelectedDay(null); setSelectedRecord(null); }}
                                         className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all"
                                     >
                                         <X className="w-5 h-5 text-slate-400" />
                                     </button>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                                    {decreesByDay[selectedDay]?.map((entry, idx) => {
+                                    {(selectedRecord ? [{ record: selectedRecord, isStart: true, isEnd: false, isMid: false, dayNumber: 0 }] : (decreesByDay[selectedDay!] || [])).map((entry, idx) => {
                                         const isPA = entry.record.solicitudType === 'PA';
                                         return (
                                             <div
@@ -562,7 +584,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ isOpen, onClose, records, e
                                 </div>
                                 <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
                                     <p className="text-[9px] font-black text-slate-400 uppercase text-center tracking-widest">
-                                        Total del día: {decreesByDay[selectedDay]?.length || 0} registros
+                                        {selectedRecord ? 'Información única del registro' : `Total del día: ${decreesByDay[selectedDay!]?.length || 0} registros`}
                                     </p>
                                 </div>
                             </div>

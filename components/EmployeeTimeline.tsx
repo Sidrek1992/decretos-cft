@@ -96,12 +96,12 @@ const EmployeeTimeline: React.FC<EmployeeTimelineProps> = ({ records, year = new
                                 {/* Punto del mes */}
                                 <div
                                     className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all cursor-pointer ${hasRecords
-                                            ? hasPa && hasFl
-                                                ? 'bg-gradient-to-br from-indigo-500 to-amber-500 text-white shadow-lg'
-                                                : hasPa
-                                                    ? 'bg-indigo-500 text-white shadow-md'
-                                                    : 'bg-amber-500 text-white shadow-md'
-                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
+                                        ? hasPa && hasFl
+                                            ? 'bg-gradient-to-br from-indigo-500 to-amber-500 text-white shadow-lg'
+                                            : hasPa
+                                                ? 'bg-indigo-500 text-white shadow-md'
+                                                : 'bg-amber-500 text-white shadow-md'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
                                         }`}
                                 >
                                     {hasRecords ? totalDays : months[month]}
@@ -138,22 +138,36 @@ const EmployeeTimeline: React.FC<EmployeeTimelineProps> = ({ records, year = new
 
             {/* Lista detallada compacta */}
             <div className="mt-4 space-y-1 max-h-32 overflow-y-auto">
-                {yearRecords.map((record, idx) => {
+                {[...yearRecords].reverse().map((record, idx) => {
                     const date = new Date(record.fechaInicio + 'T12:00:00');
+                    const dayLabel = new Intl.DateTimeFormat('es-CL', { weekday: 'long' }).format(date);
 
                     return (
                         <div
                             key={idx}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] ${record.solicitudType === 'PA'
-                                    ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
-                                    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] ${record.solicitudType === 'PA'
+                                ? 'bg-indigo-50/50 dark:bg-indigo-900/30 border border-indigo-100/50 dark:border-indigo-800/20 text-indigo-700 dark:text-indigo-300'
+                                : 'bg-amber-50/50 dark:bg-amber-900/30 border border-amber-100/50 dark:border-amber-800/20 text-amber-700 dark:text-amber-300'
                                 }`}
                         >
-                            <span className="font-black">{record.solicitudType}</span>
-                            <ChevronRight size={10} className="opacity-40" />
-                            <span className="font-mono">{date.toLocaleDateString('es-CL')}</span>
-                            <span className="font-bold">{record.cantidadDias}d</span>
-                            <span className="text-slate-400 dark:text-slate-500 truncate flex-1">{record.tipoJornada}</span>
+                            <div className="flex flex-col min-w-[32px]">
+                                <span className="font-black leading-none">{record.solicitudType}</span>
+                                <span className="text-[7px] opacity-70 uppercase tracking-tighter">Tipo</span>
+                            </div>
+                            <div className="w-px h-6 bg-current opacity-10 mx-1" />
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                    <span className="font-bold capitalize">{dayLabel}</span>
+                                    <span className="w-1 h-1 rounded-full bg-current opacity-20" />
+                                    <span className="font-black tracking-tight">{date.toLocaleDateString('es-CL')}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[8px] opacity-70 font-bold uppercase tracking-tight">
+                                    <span>Inicia el {date.getDate()}</span>
+                                    <span>·</span>
+                                    <span>{record.cantidadDias} días</span>
+                                    {record.tipoJornada !== 'Completa' && <span>· {record.tipoJornada}</span>}
+                                </div>
+                            </div>
                         </div>
                     );
                 })}
