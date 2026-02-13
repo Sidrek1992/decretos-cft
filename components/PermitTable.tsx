@@ -524,7 +524,7 @@ const PermitTable: React.FC<PermitTableProps> = ({
                     {(activeTab === 'FL' || activeTab === 'ALL') && (
                       <td className="px-1.5 sm:px-2 py-3 sm:py-4 hidden md:table-cell">
                         {record.solicitudType === 'FL' ? (
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col items-start gap-0.5">
                             {record.periodo1 && (
                               <span className="px-1 py-0.5 rounded text-[7px] sm:text-[8px] font-black tracking-wide bg-sky-50 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 border border-sky-100 dark:border-sky-800 whitespace-nowrap">
                                 {record.periodo1}

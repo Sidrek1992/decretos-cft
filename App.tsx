@@ -1288,7 +1288,7 @@ const AuthenticatedApp: React.FC = () => {
   // Mostrar loader mientras se verifica la sesión
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 dark:bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center page-fade-in">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto shadow-xl shadow-indigo-200 dark:shadow-indigo-900/50">
             <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
