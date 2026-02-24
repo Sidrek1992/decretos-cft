@@ -653,15 +653,29 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
         }> = {};
 
         // Último registro por RUT por tipo → para saldo
+        // Se filtra por año para que el saldo refleje el último decreto del período seleccionado.
+        // Esto evita que registros de años anteriores sobreescriban el saldo del año activo.
         const lastByRutPA: Record<string, PermitRecord> = {};
         const lastByRutFL: Record<string, PermitRecord> = {};
-        const sortedByCreated = [...records].sort((a, b) => compareRecordsByDateDesc(a, b));
+        const sortedByCreated = [...filteredByYear].sort((a, b) => compareRecordsByDateDesc(a, b));
 
         sortedByCreated.forEach(r => {
             if (r.solicitudType === 'PA') {
                 if (!lastByRutPA[r.rut]) lastByRutPA[r.rut] = r;
             } else if (r.solicitudType === 'FL') {
                 if (!lastByRutFL[r.rut]) lastByRutFL[r.rut] = r;
+            }
+        });
+
+        // Para saldo bajo crítico siempre se usa el último registro global (todos los años)
+        const lastByRutPAGlobal: Record<string, PermitRecord> = {};
+        const lastByRutFLGlobal: Record<string, PermitRecord> = {};
+        const sortedGlobal = [...records].sort((a, b) => compareRecordsByDateDesc(a, b));
+        sortedGlobal.forEach(r => {
+            if (r.solicitudType === 'PA') {
+                if (!lastByRutPAGlobal[r.rut]) lastByRutPAGlobal[r.rut] = r;
+            } else if (r.solicitudType === 'FL') {
+                if (!lastByRutFLGlobal[r.rut]) lastByRutFLGlobal[r.rut] = r;
             }
         });
 
@@ -706,15 +720,15 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
             })
             .sort((a, b) => b.totalDias - a.totalDias);
 
-        // --- Saldo bajo (<2 días) - siempre global ---
+        // --- Saldo bajo (<2 días) - siempre global (usa lastByRutPAGlobal/FLGlobal) ---
         const lowBalance: Array<{ nombre: string; rut: string; saldo: number; tipo: string }> = [];
-        Object.entries(lastByRutPA).forEach(([rut, r]) => {
+        Object.entries(lastByRutPAGlobal).forEach(([rut, r]) => {
             const saldo = r.diasHaber - r.cantidadDias;
             if (saldo < 2) {
                 lowBalance.push({ nombre: r.funcionario, rut, saldo, tipo: 'PA' });
             }
         });
-        Object.entries(lastByRutFL).forEach(([rut, r]) => {
+        Object.entries(lastByRutFLGlobal).forEach(([rut, r]) => {
             const saldo = getFLSaldoFinal(r, 0);
             if (saldo < 2) {
                 lowBalance.push({ nombre: r.funcionario, rut, saldo, tipo: 'FL' });
