@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { PermitRecord } from '../types';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
+import { normalizeRutCanonical } from '../utils/rutIntegrity';
 import { X, AlertTriangle, TrendingDown, User } from 'lucide-react';
 
 interface LowBalanceModalProps {
@@ -20,29 +21,31 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
             saldoFL: number | null;
         }> = {};
 
-        const sorted = [...records].sort((a, b) => compareRecordsByDateDesc(a, b));
+        const sorted = [...records].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
 
         // Procesar PA — saldo final = diasHaber - cantidadDias del último registro
         const seenPA = new Set<string>();
         sorted.filter(r => r.solicitudType === 'PA').forEach(r => {
-            if (!seenPA.has(r.rut)) {
-                if (!balanceByEmployee[r.rut]) {
-                    balanceByEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
+            const key = normalizeRutCanonical(r.rut) || r.rut;
+            if (!seenPA.has(key)) {
+                if (!balanceByEmployee[key]) {
+                    balanceByEmployee[key] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
                 }
-                balanceByEmployee[r.rut].saldoPA = r.diasHaber - r.cantidadDias;
-                seenPA.add(r.rut);
+                balanceByEmployee[key].saldoPA = r.diasHaber - r.cantidadDias;
+                seenPA.add(key);
             }
         });
 
         // Procesar FL — usar saldo final según 1 o 2 períodos
         const seenFL = new Set<string>();
         sorted.filter(r => r.solicitudType === 'FL').forEach(r => {
-            if (!seenFL.has(r.rut)) {
-                if (!balanceByEmployee[r.rut]) {
-                    balanceByEmployee[r.rut] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
+            const key = normalizeRutCanonical(r.rut) || r.rut;
+            if (!seenFL.has(key)) {
+                if (!balanceByEmployee[key]) {
+                    balanceByEmployee[key] = { nombre: r.funcionario, rut: r.rut, saldoPA: null, saldoFL: null };
                 }
-                balanceByEmployee[r.rut].saldoFL = getFLSaldoFinal(r, 0);
-                seenFL.add(r.rut);
+                balanceByEmployee[key].saldoFL = getFLSaldoFinal(r, 0);
+                seenFL.add(key);
             }
         });
 

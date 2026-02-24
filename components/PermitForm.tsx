@@ -173,9 +173,11 @@ const PermitForm: React.FC<PermitFormProps> = ({
     }
 
     if (!editingRecord && formData.rut) {
+      // Comparar RUTs normalizados (sin puntos/guiones) para tolerar distintos formatos de almacenamiento
+      const canonicalFormRut = normalizeRutCanonical(formData.rut);
       const empRecords = records
-        .filter(r => r.rut === formData.rut && r.solicitudType === formData.solicitudType)
-        .sort((a, b) => compareRecordsByDateDesc(a, b));
+        .filter(r => normalizeRutCanonical(r.rut) === canonicalFormRut && r.solicitudType === formData.solicitudType)
+        .sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
 
       if (empRecords.length > 0) {
         const last = empRecords[0];

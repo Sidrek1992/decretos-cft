@@ -83,16 +83,18 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     const employeeStats = useMemo(() => {
         const stats: Record<string, EmployeeStats> = {};
         employees.forEach(emp => {
+            const canonicalEmpRut = normalizeRutCanonical(emp.rut);
             const empRecords = records.filter(r =>
-                r.rut === emp.rut || r.funcionario.toLowerCase() === emp.nombre.toLowerCase()
+                normalizeRutCanonical(r.rut) === canonicalEmpRut ||
+                normalizeIdentityName(r.funcionario) === normalizeIdentityName(emp.nombre)
             );
             const diasPA = empRecords.filter(r => r.solicitudType === 'PA').reduce((sum, r) => sum + r.cantidadDias, 0);
             const diasFL = empRecords.filter(r => r.solicitudType === 'FL').reduce((sum, r) => sum + r.cantidadDias, 0);
             const sortedDecrees = [...empRecords].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
-            const lastPA = empRecords.filter(r => r.solicitudType === 'PA').sort((a, b) => compareRecordsByDateDesc(a, b))[0];
+            const lastPA = empRecords.filter(r => r.solicitudType === 'PA').sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'))[0];
             const diasHaber = lastPA ? lastPA.diasHaber : 6;
             const saldo = lastPA ? lastPA.diasHaber - lastPA.cantidadDias : 6;
-            const lastFL = empRecords.filter(r => r.solicitudType === 'FL').sort((a, b) => compareRecordsByDateDesc(a, b))[0];
+            const lastFL = empRecords.filter(r => r.solicitudType === 'FL').sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'))[0];
             const saldoFL = lastFL ? getFLSaldoFinal(lastFL, 0) : 0;
             stats[emp.rut] = { totalDecrees: empRecords.length, diasPA, diasFL, diasHaber, saldo, saldoFL, lastDecree: sortedDecrees[0] || null, decrees: sortedDecrees };
         });

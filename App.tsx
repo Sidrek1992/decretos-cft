@@ -49,6 +49,8 @@ import { useEmployeeSync } from './hooks/useEmployeeSync';
 import { useDarkMode } from './hooks/useDarkMode';
 import { calculateNextCorrelatives } from './utils/formatters';
 import { getFLSaldoFinal } from './utils/flBalance';
+import { compareRecordsByDateDesc } from './utils/recordDates';
+import { normalizeRutCanonical } from './utils/rutIntegrity';
 import { appendAuditLog } from './utils/audit';
 import { CONFIG } from './config';
 import {
@@ -449,15 +451,16 @@ const AppContent: React.FC = () => {
   const notifications_criticalCount = useMemo(() => {
     let count = 0;
     employees.forEach(emp => {
-      const paRecs = records.filter(r => r.rut === emp.rut && r.solicitudType === 'PA');
+      const canonicalEmpRut = normalizeRutCanonical(emp.rut);
+      const paRecs = records.filter(r => normalizeRutCanonical(r.rut) === canonicalEmpRut && r.solicitudType === 'PA');
       if (paRecs.length > 0) {
-        const sorted = [...paRecs].sort((a, b) => b.createdAt - a.createdAt);
+        const sorted = [...paRecs].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
         const saldo = sorted[0].diasHaber - sorted[0].cantidadDias;
         if (saldo <= 0) count++;
       }
-      const flRecs = records.filter(r => r.rut === emp.rut && r.solicitudType === 'FL');
+      const flRecs = records.filter(r => normalizeRutCanonical(r.rut) === canonicalEmpRut && r.solicitudType === 'FL');
       if (flRecs.length > 0) {
-        const sorted = [...flRecs].sort((a, b) => b.createdAt - a.createdAt);
+        const sorted = [...flRecs].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
         const saldoFL = getFLSaldoFinal(sorted[0], 0);
         if (saldoFL <= 0) count++;
       }

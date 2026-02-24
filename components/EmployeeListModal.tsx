@@ -92,8 +92,10 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
     const stats: Record<string, EmployeeStats> = {};
 
     employees.forEach(emp => {
+      const canonicalEmpRut = normalizeRutCanonical(emp.rut);
       const empRecords = records.filter(r =>
-        r.rut === emp.rut || r.funcionario.toLowerCase() === emp.nombre.toLowerCase()
+        normalizeRutCanonical(r.rut) === canonicalEmpRut ||
+        normalizeIdentityName(r.funcionario) === normalizeIdentityName(emp.nombre)
       );
 
       const diasPA = empRecords
@@ -109,14 +111,14 @@ const EmployeeListModal: React.FC<EmployeeListModalProps> = ({
       // PA saldo: from the most recent PA record (diasHaber - cantidadDias)
       const lastPA = empRecords
         .filter(r => r.solicitudType === 'PA')
-        .sort((a, b) => compareRecordsByDateDesc(a, b))[0];
+        .sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'))[0];
       const diasHaber = lastPA ? lastPA.diasHaber : 6;
       const saldo = lastPA ? lastPA.diasHaber - lastPA.cantidadDias : 6;
 
       // FL saldo: from the most recent FL record (P1/P2 según períodos)
       const lastFL = empRecords
         .filter(r => r.solicitudType === 'FL')
-        .sort((a, b) => compareRecordsByDateDesc(a, b))[0];
+        .sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'))[0];
       const saldoFL = lastFL ? getFLSaldoFinal(lastFL, 0) : 0;
 
       stats[emp.rut] = {

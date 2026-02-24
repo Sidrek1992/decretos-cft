@@ -28,6 +28,7 @@ import { exportDashboardToPDF } from '../services/batchPdfGenerator';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
 import { normalizeSearchText } from '../utils/search';
+import { normalizeRutCanonical } from '../utils/rutIntegrity';
 import { CONFIG } from '../config';
 import OperationalOverview from './OperationalOverview';
 
@@ -652,34 +653,34 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
             registros: number;
         }> = {};
 
-        // Último registro por RUT por tipo → para saldo
-        // Se filtra por año para que el saldo refleje el último decreto del período seleccionado.
-        // Esto evita que registros de años anteriores sobreescriban el saldo del año activo.
-        const lastByRutPA: Record<string, PermitRecord> = {};
-        const lastByRutFL: Record<string, PermitRecord> = {};
-        const sortedByCreated = [...filteredByYear].sort((a, b) => compareRecordsByDateDesc(a, b));
+        // Construye el último registro PA/FL por RUT normalizado.
+        // - Usa normalizeRutCanonical como clave para tolerar distintos formatos de RUT en la hoja.
+        // - Ordena por fechaInicio DESC (cuándo ocurrió el permiso) con createdAt como desempate,
+        //   ya que el saldo PA está encadenado cronológicamente por fecha de inicio del permiso.
+        //   Usar fechaDecreto como primario falla cuando se emiten decretos fuera de orden cronológico.
+        const buildLastByRut = (source: PermitRecord[]): { PA: Record<string, PermitRecord>; FL: Record<string, PermitRecord> } => {
+            const PA: Record<string, PermitRecord> = {};
+            const FL: Record<string, PermitRecord> = {};
+            const sorted = [...source].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
+            sorted.forEach(r => {
+                const key = normalizeRutCanonical(r.rut);
+                if (!key) return;
+                if (r.solicitudType === 'PA') {
+                    if (!PA[key]) PA[key] = r;
+                } else if (r.solicitudType === 'FL') {
+                    if (!FL[key]) FL[key] = r;
+                }
+            });
+            return { PA, FL };
+        };
 
-        sortedByCreated.forEach(r => {
-            if (r.solicitudType === 'PA') {
-                if (!lastByRutPA[r.rut]) lastByRutPA[r.rut] = r;
-            } else if (r.solicitudType === 'FL') {
-                if (!lastByRutFL[r.rut]) lastByRutFL[r.rut] = r;
-            }
-        });
+        // Para el resumen del año filtrado
+        const { PA: lastByRutPA, FL: lastByRutFL } = buildLastByRut(filteredByYear);
 
-        // Para saldo bajo crítico siempre se usa el último registro global (todos los años)
-        const lastByRutPAGlobal: Record<string, PermitRecord> = {};
-        const lastByRutFLGlobal: Record<string, PermitRecord> = {};
-        const sortedGlobal = [...records].sort((a, b) => compareRecordsByDateDesc(a, b));
-        sortedGlobal.forEach(r => {
-            if (r.solicitudType === 'PA') {
-                if (!lastByRutPAGlobal[r.rut]) lastByRutPAGlobal[r.rut] = r;
-            } else if (r.solicitudType === 'FL') {
-                if (!lastByRutFLGlobal[r.rut]) lastByRutFLGlobal[r.rut] = r;
-            }
-        });
+        // Para saldo bajo crítico: siempre global (todos los años)
+        const { PA: lastByRutPAGlobal, FL: lastByRutFLGlobal } = buildLastByRut(records);
 
-        // Contar sobre datos filtrados
+        // Contar sobre datos filtrados; byEmployee también indexado por RUT normalizado
         filtered.forEach(r => {
             const days = getAnalyticsDays(r);
             const topDays = r.solicitudType === 'FL' ? getFLRequestedPeriodDays(r) : days;
@@ -687,10 +688,11 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
             else if (r.solicitudType === 'FL') flCount++;
             else return;
             totalDays += days;
-            uniqueRuts.add(r.rut);
+            const key = normalizeRutCanonical(r.rut) || r.rut;
+            uniqueRuts.add(key);
 
-            if (!byEmployee[r.rut]) {
-                byEmployee[r.rut] = {
+            if (!byEmployee[key]) {
+                byEmployee[key] = {
                     nombre: r.funcionario,
                     rut: r.rut,
                     diasPA: 0,
@@ -701,37 +703,38 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
                     registros: 0
                 };
             }
-            if (r.solicitudType === 'PA') byEmployee[r.rut].diasPA += days;
-            else if (r.solicitudType === 'FL') byEmployee[r.rut].diasFL += days;
-            byEmployee[r.rut].totalDias += days;
-            byEmployee[r.rut].totalDiasTop += topDays;
-            if (r.solicitudType === 'FL') byEmployee[r.rut].diasFLTop += topDays;
-            byEmployee[r.rut].registros++;
+            if (r.solicitudType === 'PA') byEmployee[key].diasPA += days;
+            else if (r.solicitudType === 'FL') byEmployee[key].diasFL += days;
+            byEmployee[key].totalDias += days;
+            byEmployee[key].totalDiasTop += topDays;
+            if (r.solicitudType === 'FL') byEmployee[key].diasFLTop += topDays;
+            byEmployee[key].registros++;
         });
 
         // --- Top funcionarios con saldo ---
+        // Ambos mapas usan la misma clave (RUT normalizado), por lo que el lookup siempre coincide
         const allFuncionarios = Object.entries(byEmployee)
-            .map(([rut, emp]) => {
-                const lastPA = lastByRutPA[rut];
-                const lastFL = lastByRutFL[rut];
+            .map(([key, emp]) => {
+                const lastPA = lastByRutPA[key];
+                const lastFL = lastByRutFL[key];
                 const saldoPA = lastPA ? (lastPA.diasHaber - lastPA.cantidadDias) : null;
                 const saldoFL = lastFL ? getFLSaldoFinal(lastFL, null) : null;
                 return { ...emp, saldoPA, saldoFL };
             })
             .sort((a, b) => b.totalDias - a.totalDias);
 
-        // --- Saldo bajo (<2 días) - siempre global (usa lastByRutPAGlobal/FLGlobal) ---
+        // --- Saldo bajo (<2 días) - siempre global ---
         const lowBalance: Array<{ nombre: string; rut: string; saldo: number; tipo: string }> = [];
-        Object.entries(lastByRutPAGlobal).forEach(([rut, r]) => {
+        Object.entries(lastByRutPAGlobal).forEach(([, r]) => {
             const saldo = r.diasHaber - r.cantidadDias;
             if (saldo < 2) {
-                lowBalance.push({ nombre: r.funcionario, rut, saldo, tipo: 'PA' });
+                lowBalance.push({ nombre: r.funcionario, rut: r.rut, saldo, tipo: 'PA' });
             }
         });
-        Object.entries(lastByRutFLGlobal).forEach(([rut, r]) => {
+        Object.entries(lastByRutFLGlobal).forEach(([, r]) => {
             const saldo = getFLSaldoFinal(r, 0);
             if (saldo < 2) {
-                lowBalance.push({ nombre: r.funcionario, rut, saldo, tipo: 'FL' });
+                lowBalance.push({ nombre: r.funcionario, rut: r.rut, saldo, tipo: 'FL' });
             }
         });
         lowBalance.sort((a, b) => a.saldo - b.saldo);

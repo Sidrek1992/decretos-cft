@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { PermitRecord, Employee } from '../types';
 import { compareRecordsByDateDesc, getRecordDateValue } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
+import { normalizeRutCanonical } from '../utils/rutIntegrity';
 import {
     Bell, X, AlertTriangle, Calendar, User, ChevronRight, Clock, TrendingUp,
     Info, CheckCircle, AlertCircle, Zap, Shield, ChevronDown, Eye, EyeOff,
@@ -106,10 +107,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ records, employ
 
         // 🔴 1. ALERTAS DE SALDO BAJO Y NEGATIVO
         employees.forEach(emp => {
+            const canonicalEmpRut = normalizeRutCanonical(emp.rut);
             // Alertas PA
             const paRecords = records.filter(r =>
-                r.rut === emp.rut && r.solicitudType === 'PA'
-            ).sort((a, b) => compareRecordsByDateDesc(a, b));
+                normalizeRutCanonical(r.rut) === canonicalEmpRut && r.solicitudType === 'PA'
+            ).sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
 
             if (paRecords.length > 0) {
                 const lastRecord = paRecords[0];
@@ -147,8 +149,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ records, employ
 
             // Alertas FL - Feriado Legal
             const flRecords = records.filter(r =>
-                r.rut === emp.rut && r.solicitudType === 'FL'
-            ).sort((a, b) => compareRecordsByDateDesc(a, b));
+                normalizeRutCanonical(r.rut) === canonicalEmpRut && r.solicitudType === 'FL'
+            ).sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
 
             if (flRecords.length > 0) {
                 const lastFL = flRecords[0];
@@ -175,8 +177,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ records, employ
             const daysUntilYearEnd = Math.ceil((new Date(currentYear, 11, 31).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
             const employeesWithUnusedPA = employees.filter(emp => {
+                const canonicalRut = normalizeRutCanonical(emp.rut);
                 const empRecords = records.filter(r =>
-                    r.rut === emp.rut &&
+                    normalizeRutCanonical(r.rut) === canonicalRut &&
                     r.solicitudType === 'PA' &&
                     new Date(r.fechaInicio + 'T12:00:00').getFullYear() === currentYear
                 );
