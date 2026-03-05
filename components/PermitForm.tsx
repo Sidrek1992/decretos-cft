@@ -602,6 +602,19 @@ const PermitForm: React.FC<PermitFormProps> = ({
         setErrors({ ...newErrors, cantidadDias: 'Saldo FL insuficiente' });
         return;
       }
+
+      const totalSolicitadoPeriodos = (formData.solicitadoP1 || 0) + (hasPeriod2 ? (formData.solicitadoP2 || 0) : 0);
+      if (Number(formData.cantidadDias) !== totalSolicitadoPeriodos) {
+        const diasFeriado = Number(formData.cantidadDias);
+        const p1 = formData.solicitadoP1 || 0;
+        const p2 = hasPeriod2 ? (formData.solicitadoP2 || 0) : null;
+        const mensajePeriodos = p2 !== null
+          ? `P1 (${p1}) + P2 (${p2}) = ${totalSolicitadoPeriodos}`
+          : `Período 1 (${p1})`;
+        setFormError(`Los días del feriado (${diasFeriado}) no coinciden con los días solicitados en los períodos: ${mensajePeriodos}.`);
+        setErrors({ ...newErrors, cantidadDias: 'No coincide con períodos' });
+        return;
+      }
     }
 
     // ★ VALIDACIÓN DE CONFLICTO DE FECHAS
