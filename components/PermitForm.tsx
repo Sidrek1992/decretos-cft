@@ -1103,6 +1103,33 @@ const PermitForm: React.FC<PermitFormProps> = ({
             </div>
           )}
 
+          {/* ===================== RESPONSABLE ADMINISTRATIVO ===================== */}
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Responsable Administrativo</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">R.A.</label>
+                <input
+                  type="text"
+                  name="ra"
+                  value={formData.ra}
+                  onChange={handleChange}
+                  className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-4 py-3 rounded-xl font-black text-slate-800 dark:text-white outline-none focus:border-indigo-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Emite</label>
+                <input
+                  type="text"
+                  name="emite"
+                  value={formData.emite}
+                  onChange={handleChange}
+                  className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-4 py-3 rounded-xl font-black text-slate-800 dark:text-white outline-none focus:border-indigo-500 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* ===================== BOTÓN SUBMIT ===================== */}
           <div className="flex justify-end pt-4">
             <button
