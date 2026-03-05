@@ -1105,25 +1105,29 @@ const PermitForm: React.FC<PermitFormProps> = ({
 
           {/* ===================== RESPONSABLE ADMINISTRATIVO ===================== */}
           <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Responsable Administrativo</p>
+            <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">Responsable Administrativo</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">R.A.</label>
+                <label htmlFor="ra" className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">R.A.</label>
                 <input
+                  id="ra"
                   type="text"
                   name="ra"
                   value={formData.ra}
                   onChange={handleChange}
+                  placeholder="Sigla R.A."
                   className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-4 py-3 rounded-xl font-black text-slate-800 dark:text-white outline-none focus:border-indigo-500 text-sm"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Emite</label>
+                <label htmlFor="emite" className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Emite</label>
                 <input
+                  id="emite"
                   type="text"
                   name="emite"
                   value={formData.emite}
                   onChange={handleChange}
+                  placeholder="Sigla emisor"
                   className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-4 py-3 rounded-xl font-black text-slate-800 dark:text-white outline-none focus:border-indigo-500 text-sm"
                 />
               </div>
