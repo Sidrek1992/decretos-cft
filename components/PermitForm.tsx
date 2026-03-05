@@ -603,11 +603,11 @@ const PermitForm: React.FC<PermitFormProps> = ({
         return;
       }
 
-      const totalSolicitadoPeriodos = (formData.solicitadoP1 || 0) + (hasPeriod2 ? (formData.solicitadoP2 || 0) : 0);
+      const p1 = formData.solicitadoP1 || 0;
+      const p2 = hasPeriod2 ? (formData.solicitadoP2 || 0) : null;
+      const totalSolicitadoPeriodos = p1 + (p2 ?? 0);
       if (Number(formData.cantidadDias) !== totalSolicitadoPeriodos) {
         const diasFeriado = Number(formData.cantidadDias);
-        const p1 = formData.solicitadoP1 || 0;
-        const p2 = hasPeriod2 ? (formData.solicitadoP2 || 0) : null;
         const mensajePeriodos = p2 !== null
           ? `P1 (${p1}) + P2 (${p2}) = ${totalSolicitadoPeriodos}`
           : `Período 1 (${p1})`;
