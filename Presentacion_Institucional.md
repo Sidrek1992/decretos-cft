@@ -37,26 +37,43 @@ La aplicación sirve para gestionar de manera automatizada las solicitudes de **
     *   *Resultado:* [Ver APP_Dashboard_Resultado.png]
 
 ### 🔹 Emisión y Registro de Decretos
-*   **Para qué sirve:** Generar documentos formales de permisos y feriados de manera estandarizada.
-*   **Qué permite hacer:** Seleccionar funcionarios, definir periodos de ausencia y emitir decretos administrativos automáticos vinculados a la base de datos.
-*   **Cómo se usa:** El usuario selecciona el tipo de permiso (PA o FL), busca al funcionario por nombre o RUT, y completa las fechas solicitadas.
+*   **Para qué sirve:** Generar documentos formales de permisos y feriados de manera estandarizada y automática.
+*   **Qué permite hacer:** Seleccionar funcionarios, definir periodos de ausencia y emitir decretos administrativos vinculados a la base de datos de forma instantánea.
+*   **Escaneo Inteligente con IA:** 
+    *   **Cómo funciona:** El usuario hace clic en el botón **"ESCANEAR SOLICITUD"** y sube el formulario de PA o FL firmado.
+    *   **Proceso:** El sistema utiliza Inteligencia Artificial para leer el documento, extraer el nombre del funcionario, RUT, fechas y tipo de permiso automáticamente.
+    *   **Ahorro de tiempo:** Elimina la necesidad de digitar manualmente los datos, reduciendo errores humanos y agilizando el proceso de registro significativamente.
+*   **Cómo se usa:** 
+    1.  Clic en el módulo **"DECRETOS: Emisión y Registro"** en el menú lateral.
+    2.  Seleccionar el tipo de permiso (**PA** o **FL**) mediante las pestañas centrales.
+    3.  Usar el botón **"ESCANEAR SOLICITUD"** para autocompletar o buscar manualmente al funcionario.
+    4.  Verificar fechas y cantidad de días calculados por el sistema.
+    5.  Clic en **"GENERAR DECRETO"** (icono de Guardar).
+*   **Generación de PDF:** El sistema utiliza una tecnología de plantillas inteligentes que inyecta los datos automáticamente en un documento oficial, garantizando que todos los decretos sigan el mismo formato institucional sin errores tipográficos.
 *   **Resultado que obtiene el usuario:** Un decreto registrado formalmente y el balance del funcionario descontado en tiempo real.
-*   **Beneficio práctico:** Eliminación de errores de cálculo y estandarización de documentos institucionales.
+*   **Beneficio práctico:** **Automatización total.** Se elimina la necesidad de redactar documentos manualmente en Word, reduciendo el riesgo de errores de cálculo y estandarizando la imagen institucional.
 *   **Capturas:**
-    *   *Inicio:* [Ver APP_GestionDecretos_Inicio.png]
-    *   *Uso:* [Ver APP_GestionDecretos_Proceso.png]
-    *   *Resultado:* [Ver APP_GestionDecretos_Resultado.png]
+    *   *Formulario de Emisión (con botón IA):* [Ver emision_decretos_form.png]
+    *   *Proceso de Escaneo con IA:* [Ver app_emisiondecretos_ia_scan.png]
 
 ### 🔹 Libro de Decretos Histórico
-*   **Para qué sirve:** Actuar como el archivo digital oficial de todos los actos administrativos emitidos.
-*   **Qué permite hacer:** Consultar, filtrar y auditar todos los decretos por año, mes o tipo de permiso.
-*   **Cómo se usa:** El usuario navega por los periodos mensuales, aplica filtros de búsqueda y visualiza resúmenes métricos del mes seleccionado.
-*   **Resultado que obtiene el usuario:** Acceso instantáneo a cualquier documento histórico para auditorías o consultas rápidas.
-*   **Beneficio práctico:** Trazabilidad absoluta y ahorro masivo de espacio físico de archivo.
+*   **Para qué sirve:** Actuar como el archivo digital oficial e interactivo de todos los actos administrativos emitidos.
+*   **Qué permite hacer:** Consultar, filtrar, auditar y **descargar** decretos de forma individual o masiva.
+*   **Cómo se usa:** 
+    1.  Ir a **"LIBRO DE DECRETOS"** en el menú.
+    2.  Usar los filtros por año, mes o tipo para encontrar los documentos.
+    3.  **Descarga Individual:** Clic en el botón de descarga directamente en la fila de cada decreto para obtener el PDF al instante.
+    4.  **Descarga Masiva:** Es posible seleccionar múltiples decretos o el mes completo. Al hacerlo, se habilita una barra azul superior con opciones de:
+        *   **Descargar Seleccionados:** Genera la descarga automática de cada archivo.
+        *   **Descargar ZIP:** Empaqueta todos los documentos seleccionados en un único archivo comprimido, facilitando el respaldo y envío de información.
+*   **Formato y Estándar:** Los archivos se generan con el formato: `SGDP-[TIPO] N° [NÚMERO] - [NOMBRE_FUNCIONARIO].pdf`, manteniendo un orden impecable en el almacenamiento digital.
+*   **Resultado que obtiene el usuario:** Acceso instantáneo y descarga de cualquier documento histórico en segundos.
+*   **Beneficio práctico:** **Ahorro masivo de tiempo.** Lo que antes tomaba horas buscando en archivadores físicos y escaneando hojas, ahora se resuelve con un clic. La estandarización automática asegura que la auditoría sea simple y transparente.
 *   *Capturas:*
-    *   *Inicio:* [Ver APP_LibroDecretos_Inicio.png]
-    *   *Uso:* [Ver APP_LibroDecretos_Proceso.png]
-    *   *Resultado:* [Ver APP_LibroDecretos_Resultado.png]
+    *   *Vista General del Libro:* [Ver libro_decretos_table.png]
+    *   *Menú de Acciones (3 puntos):* [Ver app_librodecretos_action_menu.png]
+    *   *Procesando PDF Individual:* [Ver app_librodecretos_pdf_modal.png]
+    *   *Procesando Descarga ZIP:* [Ver app_librodecretos_zip_modal.png]
 
 ### 🔹 Calendario Operacional
 *   **Para qué sirve:** Planificar y visualizar la disponibilidad del personal en una interfaz de calendario.
@@ -84,11 +101,11 @@ La aplicación sirve para gestionar de manera automatizada las solicitudes de **
 El ciclo comienza cuando un funcionario solicita un permiso. El encargado de personal ingresa a **GDP Cloud**, abre el módulo de **Emisión de Decretos** y selecciona al funcionario. El sistema verifica automáticamente si tiene días disponibles. Una vez emitido el periodo, el **Dashboard** se actualiza con la nueva métrica, el **Calendario** refleja la ausencia para todo el equipo, y el acto administrativo queda guardado permanentemente en el **Libro de Decretos**. Finalmente, el balance del funcionario en el módulo de **Personal** se ajusta con total precisión.
 
 ## 6️⃣ Beneficios clave
-*   🚀 **Ahorro de Tiempo:** Reducción del 80% en el tiempo de emisión de documentos.
+*   🚀 **Ahorro de Tiempo:** Reducción en el tiempo de emisión de documentos.
 *   🤖 **Automatización:** Cálculos matemáticos precisos sin intervención humana.
 *   📉 **Reducción de Errores:** Validación automática de saldos y duplicidad de fechas.
 *   📋 **Orden Administrativo:** Centralización de toda la gestión en un solo lugar.
 *   🔍 **Trazabilidad:** Historial auditable de cada cambio y decreto emitido.
 
 ## 7️⃣ Valor para la institución
-La implementación de **GDP Cloud** representa un salto cualitativo en la **Modernización del Estado** y la **Transformación Digital**. Fortalece la toma de decisiones basada en datos reales, optimiza los procesos internos de Rectoría y Jefatura, y asegura una gestión de personas justa, transparente y altamente eficiente.
+La implementación de **GDP Cloud** representa un salto cualitativo en la **Modernización de Sistemas de Gestión de Personas**. Fortalece la toma de decisiones basada en datos reales, optimiza los procesos internos del área y asegura una gestión de personas justa, transparente y altamente eficiente.
