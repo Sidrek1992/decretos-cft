@@ -54,21 +54,33 @@ const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fi
     "Emite": record.emite
   };
 
-  const hasTwoPeriods = typeCode === 'FL' && record.periodo2 && (record.solicitadoP2 || 0) > 0;
+  // Detectar si FL usa 2 períodos: requiere periodo2 con texto Y al menos un dato numérico de P2
+  const hasP2Data = (record.solicitadoP2 || 0) > 0 || (record.saldoDisponibleP2 || 0) > 0;
+  const hasTwoPeriods = typeCode === 'FL' && Boolean(record.periodo2 && record.periodo2.trim() !== '') && hasP2Data;
+
+  // Para FL, usar saldoFinal almacenado en el record (calculado al crear el decreto)
+  // en vez de recalcular desde saldoDisponible - solicitado, ya que Google Sheets
+  // puede corromper números pequeños interpretándolos como fechas seriales.
+  const saldoDispP1 = record.saldoDisponibleP1 || 0;
+  const solP1 = record.solicitadoP1 || 0;
+  const saldoFinP1 = record.saldoFinalP1 ?? (saldoDispP1 - solP1);
+  const saldoDispP2 = record.saldoDisponibleP2 || 0;
+  const solP2 = record.solicitadoP2 || 0;
+  const saldoFinP2 = record.saldoFinalP2 ?? (saldoDispP2 - solP2);
 
   const payload = typeCode === 'FL' ? {
     ...basePayload,
     "templateId": hasTwoPeriods ? CONFIG.TEMPLATE_FL_2P_DOC_ID : CONFIG.TEMPLATE_FL_1P_DOC_ID,
     "Fecha_de_Término": formatLongDate(record.fechaTermino || ''),
     "Período_1": record.periodo1 || '',
-    "Saldo_Disponible_Periodo_1": (record.saldoDisponibleP1 || 0).toString().replace('.', ','),
-    "Solicitados_Periodo_1": (record.solicitadoP1 || 0).toString().replace('.', ','),
-    "Saldo_Final_Periodo_1": ((record.saldoDisponibleP1 || 0) - (record.solicitadoP1 || 0)).toString().replace('.', ','),
+    "Saldo_Disponible_Periodo_1": saldoDispP1.toString().replace('.', ','),
+    "Solicitados_Periodo_1": solP1.toString().replace('.', ','),
+    "Saldo_Final_Periodo_1": saldoFinP1.toString().replace('.', ','),
     ...(hasTwoPeriods ? {
       "Período_2": record.periodo2 || '',
-      "Saldo_Disponible_Periodo_2": (record.saldoDisponibleP2 || 0).toString().replace('.', ','),
-      "Solicitados_Periodo_2": (record.solicitadoP2 || 0).toString().replace('.', ','),
-      "Saldo_Final_Periodo_2": ((record.saldoDisponibleP2 || 0) - (record.solicitadoP2 || 0)).toString().replace('.', ','),
+      "Saldo_Disponible_Periodo_2": saldoDispP2.toString().replace('.', ','),
+      "Solicitados_Periodo_2": solP2.toString().replace('.', ','),
+      "Saldo_Final_Periodo_2": saldoFinP2.toString().replace('.', ','),
     } : {}),
   } : {
     ...basePayload,
@@ -345,61 +357,3 @@ export const exportDashboardToPDF = async (
   printWindow.document.close();
 };
 
-/**
- * Genera un reporte resumen en texto plano
- */
-export const generateSummaryReport = (
-  records: PermitRecord[],
-  employees: { nombre: string; rut: string }[]
-): string => {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-
-  // Filtrar por año actual
-  const yearRecords = records.filter(r => {
-    const date = new Date(r.fechaInicio + 'T12:00:00');
-    return date.getFullYear() === currentYear;
-  });
-
-  // Calcular estadísticas
-  const totalPA = yearRecords.filter(r => r.solicitudType === 'PA').reduce((sum, r) => sum + r.cantidadDias, 0);
-  const totalFL = yearRecords.filter(r => r.solicitudType === 'FL').reduce((sum, r) => sum + r.cantidadDias, 0);
-  const totalDecrees = yearRecords.length;
-
-  // Empleados con más uso
-  const employeeUsage = records.reduce((acc, r) => {
-    if (!acc[r.rut]) acc[r.rut] = { nombre: r.funcionario, pa: 0, fl: 0 };
-    if (r.solicitudType === 'PA') acc[r.rut].pa += r.cantidadDias;
-    else acc[r.rut].fl += r.cantidadDias;
-    return acc;
-  }, {} as Record<string, { nombre: string; pa: number; fl: number }>);
-
-  const topUsers = Object.values(employeeUsage)
-    .sort((a, b) => (b.pa + b.fl) - (a.pa + a.fl))
-    .slice(0, 5);
-
-  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-  return `
-═══════════════════════════════════════════════════════════════
-                    REPORTE GDP CLOUD
-                   ${months[currentMonth]} ${currentYear}
-═══════════════════════════════════════════════════════════════
-
-📊 RESUMEN DEL AÑO ${currentYear}
-───────────────────────────────────────────────────────────────
-  Total Decretos:     ${totalDecrees}
-  Días PA:            ${totalPA}
-  Días FL:            ${totalFL}
-  Total Empleados:    ${employees.length}
-
-📈 TOP 5 FUNCIONARIOS CON MÁS PERMISOS
-───────────────────────────────────────────────────────────────
-${topUsers.map((u, i) => `  ${i + 1}. ${u.nombre.padEnd(30)} PA: ${u.pa}d | FL: ${u.fl}d`).join('\n')}
-
-📅 Generado: ${now.toLocaleString('es-CL')}
-═══════════════════════════════════════════════════════════════
-  `.trim();
-};

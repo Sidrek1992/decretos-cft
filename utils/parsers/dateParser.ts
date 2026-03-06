@@ -51,12 +51,40 @@ export const normalizeDateValue = (value: string): string => {
 };
 
 /**
- * Normaliza un valor numérico con fallback
+ * Normaliza un valor numérico con fallback.
+ * 
+ * Detecta y corrige el caso en que Google Sheets auto-interpreta un número
+ * pequeño (ej: 15) como fecha serial y GAS lo devuelve como "1900-01-15".
+ * En ese escenario, parseFloat("1900-01-15") retornaría 1900 erróneamente.
+ * La heurística: si el string tiene formato de fecha ISO y el año es <= 1900,
+ * es casi seguro un número que fue corrompido por Sheets; extraemos el día.
  */
 export const normalizeNumberValue = (value: string | number, fallback: number): number => {
-  const num = typeof value === 'number'
-    ? value
-    : parseFloat(String(value || '').replace(',', '.'));
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? fallback : value;
+  }
+
+  const str = String(value || '').trim();
+  if (!str) return fallback;
+
+  // Detectar fecha ISO corrupta: "1899-12-DD" o "1900-01-DD" (base serial de Sheets)
+  const dateMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateMatch) {
+    const year = parseInt(dateMatch[1], 10);
+    // Google Sheets fecha serial: día 1 = 1900-01-01, día 60 = 1900-02-29 (Lotus bug)
+    // Si el año es 1899 o 1900, es casi seguro un número pequeño convertido a fecha.
+    // Reconstruimos el valor original: días desde 1899-12-31 (serial 1 = jan 1 1900)
+    if (year <= 1900) {
+      const serialDate = new Date(Date.UTC(year, parseInt(dateMatch[2], 10) - 1, parseInt(dateMatch[3], 10)));
+      const baseDate = new Date(Date.UTC(1899, 11, 31)); // serial 1 = 1900-01-01
+      const daysDiff = Math.round((serialDate.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24));
+      return Number.isNaN(daysDiff) ? fallback : daysDiff;
+    }
+    // Si el año es reciente (ej: 2024-01-15), no es un número — retornar fallback
+    return fallback;
+  }
+
+  const num = parseFloat(str.replace(',', '.'));
   return Number.isNaN(num) ? fallback : num;
 };
 

@@ -52,6 +52,7 @@ import { getFLSaldoFinal } from './utils/flBalance';
 import { compareRecordsByDateDesc } from './utils/recordDates';
 import { normalizeRutCanonical } from './utils/rutIntegrity';
 import { appendAuditLog } from './utils/audit';
+import { auditRecords } from './utils/dataAuditor';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
@@ -409,7 +410,6 @@ const AppContent: React.FC = () => {
   const auditIssues = useMemo(() => {
     if (role !== 'admin') return [];
     try {
-      const { auditRecords } = require('./utils/dataAuditor');
       return auditRecords(records || [], employees || []);
     } catch (e) {
       console.error("Auditor error:", e);
@@ -564,7 +564,10 @@ const AppContent: React.FC = () => {
   };
 
   const handleViewDecreesFromWelcome = useCallback(() => {
-    document.querySelector('section.space-y-6')?.scrollIntoView({ behavior: 'smooth' });
+    setCurrentView('decretos');
+    setTimeout(() => {
+      document.querySelector('section.space-y-6')?.scrollIntoView({ behavior: 'smooth' });
+    }, 0);
   }, []);
 
   const handleViewEmployeesFromWelcome = useCallback(() => {

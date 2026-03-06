@@ -83,6 +83,23 @@ describe('dateParser utilities', () => {
       expect(normalizeNumberValue('abc', 5)).toBe(5);
       expect(normalizeNumberValue(NaN, 0)).toBe(0);
     });
+
+    it('should recover number from Google Sheets date-corrupted values', () => {
+      // Google Sheets serial date system: serial 1 = 1900-01-01
+      // When GAS formats a serial number as a date, it becomes "yyyy-MM-dd"
+      // Common saldo values that could be corrupted:
+      expect(normalizeNumberValue('1900-01-15', 0)).toBe(15); // saldo = 15 dias
+      expect(normalizeNumberValue('1900-01-01', 0)).toBe(1);  // saldo = 1 dia
+      expect(normalizeNumberValue('1900-01-02', 0)).toBe(2);  // saldo = 2 dias
+      expect(normalizeNumberValue('1900-01-10', 0)).toBe(10); // saldo = 10 dias
+      expect(normalizeNumberValue('1900-02-01', 0)).toBe(32); // saldo = 32 (edge case large)
+    });
+
+    it('should return fallback for recent date strings in numeric context', () => {
+      // A recent ISO date should NOT be treated as a number
+      expect(normalizeNumberValue('2024-01-15', 0)).toBe(0);
+      expect(normalizeNumberValue('2026-03-06', 0)).toBe(0);
+    });
   });
 
   describe('normalizePeriodoValue', () => {

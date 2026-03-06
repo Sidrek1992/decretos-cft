@@ -188,7 +188,7 @@ export const parsePARecords = (data: unknown[][]): ParseResult => {
     }
 
     return {
-      id: `PA-${String(row[0]) || index}-${Date.now()}`,
+      id: `PA-${String(row[5] || '').replace(/\./g, '').replace(/-/g, '')}-${String(row[8] || '').replace(/-/g, '')}`,
       acto: resolved.acto,
       solicitudType: 'PA' as SolicitudType,
       materia: resolved.materia,
@@ -265,7 +265,7 @@ export const parseFLRecords = (data: unknown[][]): ParseResult => {
     }
 
     return {
-      id: `FL-${String(row[0]) || index}-${Date.now()}`,
+      id: `FL-${String(row[5] || '').replace(/\./g, '').replace(/-/g, '')}-${String(row[15] || '').replace(/-/g, '')}`,
       acto: actoRaw,
       solicitudType: 'FL' as SolicitudType,
       materia: 'Decreto Exento',

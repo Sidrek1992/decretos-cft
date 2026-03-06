@@ -333,9 +333,13 @@ export const useEmployeeSync = (
                 return prev;
             }
 
+            const previousEmployees = prev;
             const updated = [...prev, normalizedEmployee].sort((a, b) => a.nombre.localeCompare(b.nombre));
-            // Sincronizar en segundo plano
-            syncEmployeesToCloud(updated);
+            // Sincronizar en segundo plano con rollback si falla
+            syncEmployeesToCloud(updated).catch(() => {
+                setEmployees(previousEmployees);
+                onSyncError?.('Error al guardar el funcionario. Por favor intenta de nuevo.');
+            });
             return updated;
         });
     }, [onSyncError, syncEmployeesToCloud]);

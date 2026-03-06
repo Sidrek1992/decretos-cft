@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import { isValidRutModulo11 } from './utils/rutIntegrity';
+
 /**
  * Configuración centralizada de la aplicación GDP Cloud
  * Todas las URLs y constantes globales deben estar aquí
@@ -53,33 +55,22 @@ export const CONFIG = {
     }
 } as const;
 
-// Validar RUT chileno
-export const validateRut = (rut: string): boolean => {
-    if (!rut || rut.length < 8) return false;
+// Validar RUT chileno — delega a la implementación canónica en rutIntegrity
+export const validateRut = isValidRutModulo11;
 
-    const cleanRut = rut.replace(/\./g, '').replace(/-/g, '').toUpperCase();
-    const body = cleanRut.slice(0, -1);
-    const dv = cleanRut.slice(-1);
-
-    if (!/^\d+$/.test(body)) return false;
-
-    let sum = 0;
-    let multiplier = 2;
-
-    for (let i = body.length - 1; i >= 0; i--) {
-        sum += parseInt(body[i]) * multiplier;
-        multiplier = multiplier === 7 ? 2 : multiplier + 1;
-    }
-
-    const expectedDv = 11 - (sum % 11);
-    const calculatedDv = expectedDv === 11 ? '0' : expectedDv === 10 ? 'K' : expectedDv.toString();
-
-    return dv === calculatedDv;
-};
-
-// Validar fecha
+// Validar fecha — usa UTC explícito para evitar desfase de timezone
 export const validateDate = (dateString: string): boolean => {
-    if (!dateString) return false;
-    const date = new Date(dateString);
-    return !isNaN(date.getTime()) && date.getFullYear() >= 2020 && date.getFullYear() <= 2030;
+  if (!dateString) return false;
+  const parts = dateString.split('-');
+  if (parts.length !== 3) return false;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return false;
+  if (year < 2020 || year > 2035) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  // Verificar que la fecha es real usando UTC explícito
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
 };

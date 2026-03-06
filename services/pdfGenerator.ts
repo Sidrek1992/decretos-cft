@@ -88,7 +88,19 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
   };
 
   // Determinar si FL usa 1 o 2 períodos
-  const hasTwoPeriods = typeCode === 'FL' && record.periodo2 && (record.solicitadoP2 || 0) > 0;
+  // Detectar si FL usa 2 períodos: requiere periodo2 con texto Y al menos un dato numérico de P2
+  const hasP2Data = (record.solicitadoP2 || 0) > 0 || (record.saldoDisponibleP2 || 0) > 0;
+  const hasTwoPeriods = typeCode === 'FL' && Boolean(record.periodo2 && record.periodo2.trim() !== '') && hasP2Data;
+
+  // Para FL, usar saldoFinal almacenado en el record (calculado al crear el decreto)
+  // en vez de recalcular desde saldoDisponible - solicitado, ya que Google Sheets
+  // puede corromper números pequeños interpretándolos como fechas seriales.
+  const saldoDispP1 = record.saldoDisponibleP1 || 0;
+  const solP1 = record.solicitadoP1 || 0;
+  const saldoFinP1 = record.saldoFinalP1 ?? (saldoDispP1 - solP1);
+  const saldoDispP2 = record.saldoDisponibleP2 || 0;
+  const solP2 = record.solicitadoP2 || 0;
+  const saldoFinP2 = record.saldoFinalP2 ?? (saldoDispP2 - solP2);
 
   // Campos específicos según tipo
   const payload = typeCode === 'FL' ? {
@@ -96,14 +108,14 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
     "templateId": hasTwoPeriods ? CONFIG.TEMPLATE_FL_2P_DOC_ID : CONFIG.TEMPLATE_FL_1P_DOC_ID,
     "Fecha_de_Término": formatLongDate(record.fechaTermino || ''),
     "Período_1": record.periodo1 || '',
-    "Saldo_Disponible_Periodo_1": (record.saldoDisponibleP1 || 0).toString().replace('.', ','),
-    "Solicitados_Periodo_1": (record.solicitadoP1 || 0).toString().replace('.', ','),
-    "Saldo_Final_Periodo_1": ((record.saldoDisponibleP1 || 0) - (record.solicitadoP1 || 0)).toString().replace('.', ','),
+    "Saldo_Disponible_Periodo_1": saldoDispP1.toString().replace('.', ','),
+    "Solicitados_Periodo_1": solP1.toString().replace('.', ','),
+    "Saldo_Final_Periodo_1": saldoFinP1.toString().replace('.', ','),
     ...(hasTwoPeriods ? {
       "Período_2": record.periodo2 || '',
-      "Saldo_Disponible_Periodo_2": (record.saldoDisponibleP2 || 0).toString().replace('.', ','),
-      "Solicitados_Periodo_2": (record.solicitadoP2 || 0).toString().replace('.', ','),
-      "Saldo_Final_Periodo_2": ((record.saldoDisponibleP2 || 0) - (record.solicitadoP2 || 0)).toString().replace('.', ','),
+      "Saldo_Disponible_Periodo_2": saldoDispP2.toString().replace('.', ','),
+      "Solicitados_Periodo_2": solP2.toString().replace('.', ','),
+      "Saldo_Final_Periodo_2": saldoFinP2.toString().replace('.', ','),
     } : {}),
   } : {
     ...basePayload,

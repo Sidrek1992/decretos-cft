@@ -57,6 +57,7 @@ export const useCloudSync = (
   const pendingDataRef = useRef<PermitRecord[] | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const hasLoadedRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   // Manejar estado de conexión
   useEffect(() => {
@@ -386,6 +387,7 @@ export const useCloudSync = (
         setPendingSync(false);
         setIsRetryScheduled(false);
         pendingDataRef.current = null;
+        retryCountRef.current = 0;
 
         try {
           await publishSyncEvent({
@@ -421,10 +423,13 @@ export const useCloudSync = (
       }));
       onSyncError?.("Error al sincronizar con la nube");
 
-      // Reintento automático
-      if (isOnline) {
+      // Reintento automático (máximo 3 intentos)
+      if (isOnline && retryCountRef.current < 3) {
+        retryCountRef.current += 1;
         setIsRetryScheduled(true);
         retryTimeoutRef.current = setTimeout(() => syncToCloud(dataToSync), 5000);
+      } else {
+        retryCountRef.current = 0; // reset para próxima operación
       }
       return false;
     } finally {

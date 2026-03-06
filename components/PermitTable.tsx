@@ -4,7 +4,7 @@ import { PermitRecord, SolicitudType } from '../types';
 import { Search, ArrowUpDown, ChevronUp, ChevronDown, UserCircle, LayoutGrid, CheckSquare, Square, FileDown, Loader2, X, Archive, Download, CheckCircle, AlertCircle, FileText } from 'lucide-react';
 import { formatNumericDate } from '../utils/formatters';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
-import { getFLSaldoFinal } from '../utils/flBalance';
+import { getFLSaldoFinal, hasFLSecondPeriod } from '../utils/flBalance';
 import { normalizeRutForSearch, normalizeSearchText } from '../utils/search';
 import { generateBatchPDFs, BatchMode, BatchProgressInfo } from '../services/batchPdfGenerator';
 import Pagination from './Pagination';
@@ -530,7 +530,7 @@ const PermitTable: React.FC<PermitTableProps> = ({
                                 {record.periodo1}
                               </span>
                             )}
-                            {record.periodo2 && (
+                            {hasFLSecondPeriod(record) && (
                               <span className="px-1 py-0.5 rounded text-[7px] sm:text-[8px] font-black tracking-wide bg-purple-50 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-800 whitespace-nowrap">
                                 {record.periodo2}
                               </span>

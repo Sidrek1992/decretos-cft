@@ -303,29 +303,11 @@ const PermitForm: React.FC<PermitFormProps> = ({
           throw new Error(errorMsg);
         }
 
-        // DEBUG: Ver exactamente qué devuelve la IA para cada PDF
-        console.log('[FL Scan] Resultados crudos de la IA:', JSON.stringify(validResults, null, 2));
-        validResults.forEach((r, i) => {
-          console.log(`[FL Scan] PDF ${i + 1}:`, {
-            periodo: r.periodo,
-            saldoDisponible: r.saldoDisponible,
-            solicitado: r.solicitado,
-            cantidadDias: r.cantidadDias,
-            // Mostrar todas las propiedades por si viene con otro nombre
-            todasLasPropiedades: Object.keys(r)
-          });
-        });
-
         // Ordenar por período (el más antiguo primero)
         validResults.sort((a, b) => (a.periodo || '').localeCompare(b.periodo || ''));
 
         const first = validResults[0];
         const second = validResults.length > 1 ? validResults[1] : null;
-
-        console.log('[FL Scan] Después de ordenar - first:', first);
-        console.log('[FL Scan] Después de ordenar - second:', second);
-        console.log('[FL Scan] saldoDisponibleP1 será:', first.saldoDisponible || 0);
-        console.log('[FL Scan] saldoDisponibleP2 será:', second?.saldoDisponible || 0);
 
         // Calcular totales
         const totalDias = (first.solicitado || first.cantidadDias || 0) + (second?.solicitado || second?.cantidadDias || 0);
