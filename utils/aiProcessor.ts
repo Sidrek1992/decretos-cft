@@ -220,7 +220,7 @@ const processWithFrontend = async (base64Pdf: string, solicitudType: 'PA' | 'FL'
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: [{
           parts: [
             {
