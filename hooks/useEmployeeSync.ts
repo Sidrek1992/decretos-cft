@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { Employee } from '../types';
 import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
 import { localBackup } from '../services/localBackup';
-import { publishSyncEvent, subscribeToSyncEvents } from '../services/realtimeSync';
 import { formatRutForStorage, isValidRutModulo11, normalizeRutCanonical } from '../utils/rutIntegrity';
 
 const employeeLogger = logger.create('EmployeeSync');
@@ -16,9 +17,9 @@ interface UseEmployeeSyncReturn {
     lastSync: Date | null;
     fetchEmployeesFromCloud: () => Promise<void>;
     syncEmployeesToCloud: (data: Employee[]) => Promise<boolean>;
-    addEmployee: (employee: Employee) => void;
-    updateEmployee: (oldRut: string, updatedEmployee: Employee) => void;
-    deleteEmployee: (rut: string) => void;
+    addEmployee: (employee: Employee) => Promise<void>;
+    updateEmployee: (oldRut: string, updatedEmployee: Employee) => Promise<void>;
+    deleteEmployee: (rut: string) => Promise<void>;
 }
 
 const normalizeEmployeePayload = (employee: Employee): Employee | null => {
@@ -53,27 +54,44 @@ export const useEmployeeSync = (
     actorEmail?: string
 ): UseEmployeeSyncReturn => {
     const [employees, setEmployees] = useState<Employee[]>([]);
-
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncError, setSyncError] = useState(false);
     const [lastSync, setLastSync] = useState<Date | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
-    const realtimeRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const hasLoadedRef = useRef(false);
 
-    // Cargar empleados desde el Sheet al iniciar
+    // Cargar empleados desde Firestore o fallback
     useEffect(() => {
         fetchEmployeesFromCloud();
 
-        // Cleanup: cancelar fetch pendiente al desmontar
+        // Suscribirse a cambios en Firestore (Realtime)
+        const unsubscribe = onSnapshot(collection(db, 'employees'), (snapshot) => {
+             const loaded: Employee[] = [];
+             snapshot.forEach(doc => {
+                 const data = doc.data();
+                 if (data.rut && data.nombre) {
+                     loaded.push({
+                         rut: data.rut,
+                         nombre: data.nombre,
+                         departamento: data.departamento || ''
+                     });
+                 }
+             });
+             loaded.sort((a, b) => a.nombre.localeCompare(b.nombre));
+             setEmployees(loaded);
+             setLastSync(new Date());
+             hasLoadedRef.current = true;
+             localBackup.saveEmployees(loaded).catch(() => {});
+        }, (error) => {
+             employeeLogger.error("Realtime fetch error:", error);
+        });
+
         return () => {
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
-            if (realtimeRefreshTimeoutRef.current) {
-                clearTimeout(realtimeRefreshTimeoutRef.current);
-            }
+            unsubscribe();
         };
     }, []);
 
@@ -93,7 +111,6 @@ export const useEmployeeSync = (
             return;
         }
 
-        // Cancelar fetch anterior si existe
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
@@ -104,62 +121,75 @@ export const useEmployeeSync = (
         setSyncError(false);
 
         try {
-            employeeLogger.info('Iniciando fetch de empleados...');
+            employeeLogger.info('Iniciando fetch de empleados desde Firestore...');
+            const snapshot = await getDocs(collection(db, 'employees'));
+            
+            let cloudEmployees: Employee[] = [];
 
-            // Usar el mismo Web App URL pero con el sheet de empleados
-            const response = await fetch(
-                `${CONFIG.WEB_APP_URL}?sheetId=${CONFIG.EMPLOYEES_SHEET_ID}&type=employees`,
-                { signal }
-            );
-            const result = await response.json();
+            if (snapshot.empty) {
+                // MIGRACIÓN: Si Firestore está vacío, tratar de importar desde Google Sheets una vez
+                employeeLogger.info('Firestore está vacío, intentando migrar desde Google Sheets...');
+                try {
+                    const response = await fetch(`${CONFIG.WEB_APP_URL}?sheetId=${CONFIG.EMPLOYEES_SHEET_ID}&type=employees`, { signal });
+                    const result = await response.json();
+                    
+                    if (result.success && result.data) {
+                        cloudEmployees = dedupeEmployeesByRut(result.data
+                            .filter((row: unknown[]) => row && row[1])
+                            .map((row: unknown[]) => {
+                                const nombres = String(row[1] || '').trim();
+                                const primerApellido = String(row[2] || '').trim();
+                                const segundoApellido = String(row[3] || '').trim();
+                                const rut = String(row[4] || '').trim();
+                                const departamento = String(row[5] || '').trim();
+        
+                                const nombreCompleto = [nombres, primerApellido, segundoApellido].filter(Boolean).join(' ').toUpperCase();
+                                return { nombre: nombreCompleto, rut, departamento };
+                            })
+                            .map(normalizeEmployeePayload)
+                            .filter((emp: Employee | null): emp is Employee => emp !== null));
+                        
+                        if (cloudEmployees.length > 0) {
+                            // Guardar lote migrado en Firestore
+                            const batch = writeBatch(db);
+                            cloudEmployees.forEach(emp => {
+                                const canonicalRut = normalizeRutCanonical(emp.rut);
+                                if (canonicalRut) {
+                                    const empRef = doc(db, 'employees', canonicalRut);
+                                    batch.set(empRef, { ...emp, createdAt: serverTimestamp(), migratedAuto: true });
+                                }
+                            });
+                            await batch.commit();
+                            employeeLogger.info(`Migrados ${cloudEmployees.length} empleados desde Google Sheets a Firestore.`);
+                        }
+                    }
+                } catch (e) {
+                    employeeLogger.warn("No se pudo migrar de Google Sheets:", e);
+                }
+            } else {
+                 snapshot.forEach(docSnap => {
+                     const data = docSnap.data();
+                     cloudEmployees.push({
+                         rut: data.rut,
+                         nombre: data.nombre,
+                         departamento: data.departamento || ''
+                     });
+                 });
+            }
 
-            if (result.success && result.data) {
-                // Mapeo según estructura del Sheet:
-                // Col 0: N° (índice), Col 1: Nombres, Col 2: Primer Apellido, Col 3: Segundo Apellido, Col 4: RUT
-                const cloudEmployees = dedupeEmployeesByRut(result.data
-                    .filter((row: unknown[]) => row && row[1]) // Filtrar filas sin nombre
-                    .map((row: unknown[]) => {
-                        const nombres = String(row[1] || '').trim();
-                        const primerApellido = String(row[2] || '').trim();
-                        const segundoApellido = String(row[3] || '').trim();
-                        const rut = String(row[4] || '').trim();
-                        const departamento = String(row[5] || '').trim();
-
-                        // Concatenar nombre completo
-                        const nombreCompleto = [nombres, primerApellido, segundoApellido]
-                            .filter(Boolean)
-                            .join(' ')
-                            .toUpperCase();
-
-                        return {
-                            nombre: nombreCompleto,
-                            rut: rut,
-                            departamento: departamento
-                        };
-                    })
-                    .map(normalizeEmployeePayload)
-                    .filter((emp: Employee | null): emp is Employee => emp !== null));
-
-                // Ordenar alfabéticamente
+            if (cloudEmployees.length > 0) {
                 cloudEmployees.sort((a, b) => a.nombre.localeCompare(b.nombre));
                 setEmployees(cloudEmployees);
                 setLastSync(new Date());
                 hasLoadedRef.current = true;
-                try {
-                    await localBackup.saveEmployees(cloudEmployees);
-                } catch (backupError) {
-                    employeeLogger.warn('Error al guardar backup de empleados:', backupError);
-                }
-                employeeLogger.info(`Fetch completado: ${cloudEmployees.length} empleados`);
+                localBackup.saveEmployees(cloudEmployees).catch(() => {});
+                employeeLogger.info(`Carga completada: ${cloudEmployees.length} empleados`);
                 onSyncSuccess?.();
             }
+
         } catch (e) {
-            // Ignorar errores de abort (son intencionales)
-            if (e instanceof Error && e.name === 'AbortError') {
-                employeeLogger.debug('Fetch cancelado (componente desmontado)');
-                return;
-            }
-            employeeLogger.error("Error al recuperar empleados de la nube:", e);
+            if (e instanceof Error && e.name === 'AbortError') return;
+            employeeLogger.error("Error al recuperar empleados de Firebase:", e);
             setSyncError(true);
             try {
                 const backupEmployees = await localBackup.getEmployees();
@@ -181,42 +211,8 @@ export const useEmployeeSync = (
         }
     }, [onSyncSuccess, onSyncError]);
 
-    useEffect(() => {
-        const unsubscribe = subscribeToSyncEvents({
-            scope: 'employees',
-            channelKey: 'employee-sync',
-            onEvent: () => {
-                if (realtimeRefreshTimeoutRef.current) return;
-
-                realtimeRefreshTimeoutRef.current = setTimeout(() => {
-                    realtimeRefreshTimeoutRef.current = null;
-                    void fetchEmployeesFromCloud();
-                }, 900);
-            }
-        });
-
-        return () => {
-            if (realtimeRefreshTimeoutRef.current) {
-                clearTimeout(realtimeRefreshTimeoutRef.current);
-                realtimeRefreshTimeoutRef.current = null;
-            }
-            unsubscribe();
-        };
-    }, [fetchEmployeesFromCloud]);
-
-    useEffect(() => {
-        const persistBackup = async () => {
-            try {
-                if (!hasLoadedRef.current) return;
-                await localBackup.saveEmployees(employees);
-            } catch (backupError) {
-                employeeLogger.warn('Error al guardar backup de empleados:', backupError);
-            }
-        };
-
-        persistBackup();
-    }, [employees]);
-
+    // syncEmployeesToCloud (masivo) no se requerirá normalmente con Firestore base
+    // Pero se mantiene por compatibilidad si la interfaz intenta forzar sync manual de todo
     const syncEmployeesToCloud = useCallback(async (dataToSync: Employee[]): Promise<boolean> => {
         if (!navigator.onLine) {
             onSyncError?.("Sin conexión a internet");
@@ -233,156 +229,96 @@ export const useEmployeeSync = (
                     .filter((employee): employee is Employee => employee !== null)
             );
 
-            // Preparar datos para el Sheet
-            // Estructura: N°, Nombres, Primer Apellido, Segundo Apellido, RUT
-            const sheetData = normalizedData.map((emp, index) => {
-                // Intentar separar el nombre en partes
-                const parts = emp.nombre.split(' ');
-                let nombres = '';
-                let primerApellido = '';
-                let segundoApellido = '';
-
-                if (parts.length >= 4) {
-                    // Asumimos: 2 nombres + 2 apellidos
-                    nombres = parts.slice(0, 2).join(' ');
-                    primerApellido = parts[2] || '';
-                    segundoApellido = parts.slice(3).join(' ');
-                } else if (parts.length === 3) {
-                    // 1 nombre + 2 apellidos
-                    nombres = parts[0];
-                    primerApellido = parts[1];
-                    segundoApellido = parts[2];
-                } else if (parts.length === 2) {
-                    // 1 nombre + 1 apellido
-                    nombres = parts[0];
-                    primerApellido = parts[1];
-                } else {
-                    nombres = emp.nombre;
+            const batch = writeBatch(db);
+            normalizedData.forEach(emp => {
+                const canonicalRut = normalizeRutCanonical(emp.rut);
+                if (canonicalRut) {
+                    const empRef = doc(db, 'employees', canonicalRut);
+                    batch.set(empRef, { ...emp, updatedAt: serverTimestamp() }, { merge: true });
                 }
-
-                return [
-                    index + 1,      // N°
-                    nombres,        // Nombres
-                    primerApellido, // Primer Apellido
-                    segundoApellido,// Segundo Apellido
-                    emp.rut,        // RUT
-                    emp.departamento || '' // Departamento
-                ];
             });
 
-            const payload = {
-                sheetId: CONFIG.EMPLOYEES_SHEET_ID,
-                type: 'employees',
-                data: sheetData
-            };
+            await batch.commit();
+            setLastSync(new Date());
+            onSyncSuccess?.();
+            return true;
 
-            const response = await fetch(CONFIG.WEB_APP_URL, {
-                method: 'POST',
-                mode: 'cors',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                setLastSync(new Date());
-
-                try {
-                    await publishSyncEvent({
-                        scope: 'employees',
-                        action: 'sync_to_cloud',
-                        actorEmail,
-                        metadata: {
-                            total: normalizedData.length
-                        }
-                    });
-                } catch (realtimeError) {
-                    employeeLogger.warn('No se pudo publicar evento realtime de funcionarios:', realtimeError);
-                }
-
-                onSyncSuccess?.();
-                return true;
-            } else {
-                throw new Error(result.error);
-            }
         } catch (e) {
-            employeeLogger.error("Error sincronizando empleados:", e);
+            employeeLogger.error("Error batch sincronizando empleados a Firestore:", e);
             setSyncError(true);
             onSyncError?.("Error al sincronizar empleados con la nube");
             return false;
         } finally {
             setIsSyncing(false);
         }
-    }, [onSyncSuccess, onSyncError, actorEmail]);
+    }, [onSyncSuccess, onSyncError]);
 
-    const addEmployee = useCallback((employee: Employee) => {
+    const addEmployee = useCallback(async (employee: Employee) => {
         const normalizedEmployee = normalizeEmployeePayload(employee);
         if (!normalizedEmployee) {
             onSyncError?.('No se pudo guardar: RUT inválido para funcionario.');
             return;
         }
 
-        setEmployees(prev => {
-            const alreadyExists = prev.some(
-                current => normalizeRutCanonical(current.rut) === normalizeRutCanonical(normalizedEmployee.rut)
-            );
+        const canonicalRut = normalizeRutCanonical(normalizedEmployee.rut);
+        if (!canonicalRut) return;
 
-            if (alreadyExists) {
-                onSyncError?.('No se pudo guardar: ya existe un funcionario con ese RUT.');
-                return prev;
-            }
-
-            const previousEmployees = prev;
-            const updated = [...prev, normalizedEmployee].sort((a, b) => a.nombre.localeCompare(b.nombre));
-            // Sincronizar en segundo plano con rollback si falla
-            syncEmployeesToCloud(updated).catch(() => {
-                setEmployees(previousEmployees);
-                onSyncError?.('Error al guardar el funcionario. Por favor intenta de nuevo.');
+        try {
+            await setDoc(doc(db, 'employees', canonicalRut), {
+                ...normalizedEmployee,
+                createdAt: serverTimestamp()
             });
-            return updated;
-        });
-    }, [onSyncError, syncEmployeesToCloud]);
+            // El onSnapshot actualizará el estado local
+        } catch (e) {
+             employeeLogger.error('Error al añadir funcionario en Firestore:', e);
+             onSyncError?.('Error al guardar el funcionario. Por favor intenta de nuevo.');
+        }
+    }, [onSyncError]);
 
-    const updateEmployee = useCallback((oldRut: string, updatedEmployee: Employee) => {
+    const updateEmployee = useCallback(async (oldRut: string, updatedEmployee: Employee) => {
         const normalizedEmployee = normalizeEmployeePayload(updatedEmployee);
         if (!normalizedEmployee) {
             onSyncError?.('No se pudo actualizar: RUT inválido para funcionario.');
             return;
         }
 
-        setEmployees(prev => {
-            const oldCanonicalRut = normalizeRutCanonical(oldRut);
-            const hasDuplicateRut = prev.some(current => {
-                const currentCanonicalRut = normalizeRutCanonical(current.rut);
-                if (!currentCanonicalRut) return false;
-                if (currentCanonicalRut === oldCanonicalRut) return false;
-                return currentCanonicalRut === normalizeRutCanonical(normalizedEmployee.rut);
-            });
+        const oldCanonicalRut = normalizeRutCanonical(oldRut);
+        const newCanonicalRut = normalizeRutCanonical(normalizedEmployee.rut);
+        if (!oldCanonicalRut || !newCanonicalRut) return;
 
-            if (hasDuplicateRut) {
-                onSyncError?.('No se pudo actualizar: ya existe otro funcionario con ese RUT.');
-                return prev;
+        try {
+            if (oldCanonicalRut !== newCanonicalRut) {
+                 // Si cambia el RUT, crear nuevo documento y borrar el viejo
+                 const batch = writeBatch(db);
+                 batch.set(doc(db, 'employees', newCanonicalRut), {
+                     ...normalizedEmployee,
+                     updatedAt: serverTimestamp()
+                 });
+                 batch.delete(doc(db, 'employees', oldCanonicalRut));
+                 await batch.commit();
+            } else {
+                 await setDoc(doc(db, 'employees', newCanonicalRut), {
+                     ...normalizedEmployee,
+                     updatedAt: serverTimestamp()
+                 }, { merge: true });
             }
+        } catch (e) {
+             employeeLogger.error('Error al actualizar funcionario en Firestore:', e);
+             onSyncError?.('Error al actualizar el funcionario.');
+        }
+    }, [onSyncError]);
 
-            const updated = prev.map(e =>
-                normalizeRutCanonical(e.rut) === oldCanonicalRut ? normalizedEmployee : e
-            ).sort((a, b) => a.nombre.localeCompare(b.nombre));
-            // Sincronizar en segundo plano
-            syncEmployeesToCloud(updated);
-            return updated;
-        });
-    }, [onSyncError, syncEmployeesToCloud]);
+    const deleteEmployee = useCallback(async (rut: string) => {
+        const canonicalRut = normalizeRutCanonical(rut);
+        if (!canonicalRut) return;
 
-    const deleteEmployee = useCallback((rut: string) => {
-        setEmployees(prev => {
-            const targetRut = normalizeRutCanonical(rut);
-            const updated = prev.filter(e => normalizeRutCanonical(e.rut) !== targetRut);
-            // Sincronizar en segundo plano
-            syncEmployeesToCloud(updated);
-            return updated;
-        });
-    }, [syncEmployeesToCloud]);
+        try {
+             await deleteDoc(doc(db, 'employees', canonicalRut));
+        } catch (e) {
+             employeeLogger.error('Error al borrar funcionario en Firestore:', e);
+             onSyncError?.('Error al borrar funcionario.');
+        }
+    }, [onSyncError]);
 
     return {
         employees,
@@ -397,3 +333,4 @@ export const useEmployeeSync = (
         deleteEmployee
     };
 };
+
