@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { User, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail } from 'firebase/auth';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 import { UserRole, Permissions, getPermissions, hasPermission, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
 import { appendAuditLog } from '../utils/audit';
 import { getUserSecurityByEmail, isMandatoryAdminEmail, loadUserRoles, touchUserLastAccess, updateUserSecurity } from '../utils/userAdminStorage';
@@ -20,15 +21,15 @@ interface UserProfile {
 
 interface AuthContextType {
     user: User | null;
-    session: Session | null;
+    session: any | null; // deprecated in firebase architecture for this app, kept for compabibility
     profile: UserProfile | null;
     role: UserRole;
     permissions: Permissions;
     loading: boolean;
-    signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-    signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+    signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+    signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
     signOut: () => Promise<void>;
-    resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
+    resetPassword: (email: string) => Promise<{ error: Error | null }>;
     hasPermission: (permission: keyof Permissions) => boolean;
     roleLabel: string;
     roleColors: { bg: string; text: string };
@@ -48,12 +49,12 @@ interface AuthProviderProps {
     children: React.ReactNode;
 }
 
-const getEnforcedRoleByEmail = (email: string | undefined): UserRole | null => {
+const getEnforcedRoleByEmail = (email: string | null | undefined): UserRole | null => {
     if (!email) return null;
     return isMandatoryAdminEmail(email) ? 'admin' : null;
 };
 
-const getRoleFromEmail = (email: string | undefined): UserRole => {
+const getRoleFromEmail = (email: string | null | undefined): UserRole => {
     if (!email) return 'reader';
     const roles = loadUserRoles();
     return roles[email.toLowerCase()] || 'reader';
@@ -77,7 +78,6 @@ const clearWelcomeBannerDismissals = (): void => {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -85,7 +85,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const role: UserRole =
         getEnforcedRoleByEmail(user?.email) ||
         profile?.role ||
-        resolveRoleFromMetadata(user?.user_metadata as Record<string, unknown> | undefined) ||
         getRoleFromEmail(user?.email);
     const permissions = getPermissions(role);
     const roleLabel = ROLE_LABELS[role];
@@ -95,8 +94,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return hasPermission(role, permission);
     };
 
-    // Cargar perfil desde Supabase para persistir rol entre dispositivos
-    const loadProfile = useCallback(async (userId: string, email?: string): Promise<void> => {
+    // Cargar perfil desde Firestore para persistir rol entre dispositivos
+    const loadProfile = useCallback(async (userId: string, email?: string | null): Promise<void> => {
         const normalizedEmail = email?.trim().toLowerCase();
         if (!normalizedEmail) {
             setProfile(null);
@@ -104,24 +103,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         try {
-            // timeout de 5 segundos para la carga del perfil remoto
-            const profilePromise = supabase
-                .from('profiles')
-                .select('email, role, first_name, last_name, created_at')
-                .eq('email', normalizedEmail)
-                .maybeSingle();
-
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout loading profile')), 5000)
+            // Consulta Firestore para obtener el perfil
+            const q = query(
+                collection(db, 'profiles'),
+                where('email', '==', normalizedEmail),
+                limit(1)
             );
+            
+            const querySnapshot = await getDocs(q);
 
-            const { data, error } = await Promise.race([profilePromise, timeoutPromise as Promise<never>]);
-
-            if (!error && data?.role) {
-                const dbRole = String(data.role).toLowerCase();
+            if (!querySnapshot.empty) {
+                const docSnap = querySnapshot.docs[0];
+                const data = docSnap.data();
+                
+                const dbRole = String(data.role || '').toLowerCase();
                 const normalizedRole: UserRole = dbRole === 'admin' || dbRole === 'editor' || dbRole === 'reader'
                     ? (dbRole as UserRole)
                     : 'reader';
+
                 setProfile({
                     id: userId,
                     email: data.email,
@@ -130,10 +129,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     lastName: String(data.last_name || '').trim(),
                     created_at: String(data.created_at || new Date().toISOString())
                 });
-                log.debug('Perfil cargado exitosamente desde DB');
+                log.debug('Perfil cargado exitosamente desde DB (Firestore)');
                 return;
             }
-            if (error) log.error('Error en consulta de perfil:', error);
+            log.warn('No se encontró perfil en Firestore');
         } catch (err) {
             log.warn('No se pudo cargar perfil remoto (usando fallback local):', err);
         }
@@ -142,161 +141,108 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, []);
 
     useEffect(() => {
-        // Obtener sesión actual
-        const getSession = async () => {
-            log.debug('Iniciando verificación de sesión...');
+        log.debug('Iniciando verificación de sesión con Firebase...');
+        
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            log.debug('Cambio de estado detectado:', currentUser ? 'Logueado' : 'Desconectado');
             try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-
-                if (error) {
-                    log.error('Error obteniendo sesión:', error);
-                    setLoading(false);
-                    return;
-                }
-
-                if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
-                    log.warn('Usuario bloqueado:', session.user.email);
-                    await supabase.auth.signOut();
-                    setSession(null);
+                if (currentUser?.email && getUserSecurityByEmail(currentUser.email).blocked) {
+                    log.warn('Usuario bloqueado:', currentUser.email);
+                    await firebaseSignOut(auth);
                     setUser(null);
+                    setProfile(null);
                     setLoading(false);
                     return;
                 }
 
-                setSession(session);
-                setUser(session?.user ?? null);
+                setUser(currentUser);
 
-                if (session?.user) {
-                    log.debug('Sesión encontrada para', session.user.email, '- Cargando perfil...');
-                    await loadProfile(session.user.id, session.user.email);
+                if (currentUser) {
+                    log.debug('Sesión encontrada para', currentUser.email, '- Cargando perfil...');
+                    await loadProfile(currentUser.uid, currentUser.email);
                 } else {
-                    log.debug('No se encontró sesión activa');
+                    setProfile(null);
+                    clearWelcomeBannerDismissals();
                 }
             } catch (err) {
-                log.error('Error crítico en getSession:', err);
+                log.error('Error crítico en AuthStateChange:', err);
             } finally {
                 setLoading(false);
                 log.debug('Verificación de sesión finalizada.');
-            }
-        };
-
-        getSession();
-
-        // Escuchar cambios de autenticación
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
-                log.debug('Cambio de estado detectado:', event);
-                try {
-                    if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
-                        await supabase.auth.signOut();
-                        setSession(null);
-                        setUser(null);
-                        setProfile(null);
-                        setLoading(false);
-                        return;
-                    }
-
-                    setSession(session);
-                    setUser(session?.user ?? null);
-
-                    if (session?.user) {
-                        await loadProfile(session.user.id, session.user.email);
-                    } else {
-                        setProfile(null);
-                        if (event === 'SIGNED_OUT') {
-                            clearWelcomeBannerDismissals();
-                        }
-                    }
-                } catch (err) {
-                    log.error('Error en handler de onAuthStateChange:', err);
-                } finally {
-                    setLoading(false);
-                }
-            }
-        );
-
-        return () => {
-            subscription.unsubscribe();
-        };
-    }, [loadProfile]);
-
-    useEffect(() => {
-        if (!user?.id || !user?.email) return;
-
-        const unsubscribe = subscribeToProfileChanges({
-            channelKey: 'auth-context',
-            email: user.email,
-            onChange: () => {
-                void loadProfile(user.id, user.email);
             }
         });
 
         return () => {
             unsubscribe();
         };
-    }, [user?.id, user?.email, loadProfile]);
+    }, [loadProfile]);
+
+    useEffect(() => {
+        if (!user?.uid || !user?.email) return;
+
+        const unsubscribe = subscribeToProfileChanges({
+            channelKey: 'auth-context',
+            email: user.email,
+            onChange: () => {
+                void loadProfile(user.uid, user.email);
+            }
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [user?.uid, user?.email, loadProfile]);
 
     const signIn = async (email: string, password: string) => {
         const normalizedEmail = email.trim().toLowerCase();
         const securityBeforeSignIn = getUserSecurityByEmail(normalizedEmail);
         if (securityBeforeSignIn.blocked) {
             return {
-                error: {
-                    name: 'AuthApiError',
-                    message: 'Tu cuenta está bloqueada. Contacta al administrador.'
-                } as AuthError
+                error: new Error('Tu cuenta está bloqueada. Contacta al administrador.')
             };
         }
 
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-
-        if (!error) {
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
             touchUserLastAccess(normalizedEmail);
             appendAuditLog({
                 scope: 'auth',
                 action: 'login_success',
                 actor: normalizedEmail,
                 target: normalizedEmail,
-                details: 'Inicio de sesión exitoso'
+                details: 'Inicio de sesión exitoso via Firebase'
             });
 
             const security = getUserSecurityByEmail(normalizedEmail);
             if (security.forcePasswordChange) {
-                await supabase.auth.signOut();
-                const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-                    redirectTo: `${window.location.origin}/reset-password`,
+                await firebaseSignOut(auth);
+                await sendPasswordResetEmail(auth, normalizedEmail);
+
+                appendAuditLog({
+                    scope: 'auth',
+                    action: 'force_password_change_triggered',
+                    actor: normalizedEmail,
+                    target: normalizedEmail,
+                    details: 'Se forzó cambio de contraseña con email de recuperación'
                 });
 
-                if (!resetError) {
-                    appendAuditLog({
-                        scope: 'auth',
-                        action: 'force_password_change_triggered',
-                        actor: normalizedEmail,
-                        target: normalizedEmail,
-                        details: 'Se forzó cambio de contraseña con email de recuperación'
-                    });
-                }
-
                 return {
-                    error: {
-                        name: 'AuthApiError',
-                        message: 'Debes cambiar tu contraseña antes de ingresar. Revisa tu correo para continuar.'
-                    } as AuthError
+                    error: new Error('Debes cambiar tu contraseña antes de ingresar. Revisa tu correo para continuar.')
                 };
             }
+            return { error: null };
+        } catch (error: any) {
+            return { error: new Error(error.message || 'Error de autenticación') };
         }
-        return { error };
     };
 
     const signUp = async (email: string, password: string) => {
-        const { error } = await supabase.auth.signUp({
-            email,
-            password,
-        });
-        return { error };
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+            return { error: null };
+        } catch (error: any) {
+            return { error: new Error(error.message || 'Error al registrar') };
+        }
     };
 
     const signOut = async () => {
@@ -306,27 +252,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 action: 'logout',
                 actor: user.email,
                 target: user.email,
-                details: 'Cierre de sesión'
+                details: 'Cierre de sesión via Firebase'
             });
         }
         setProfile(null);
         clearWelcomeBannerDismissals();
-        await supabase.auth.signOut();
+        await firebaseSignOut(auth);
     };
 
     const resetPassword = async (email: string) => {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/reset-password`,
-        });
-        if (!error) {
+        try {
+            await sendPasswordResetEmail(auth, email);
             updateUserSecurity(email, { forcePasswordChange: false });
+            return { error: null };
+        } catch (error: any) {
+            return { error: new Error(error.message || 'Error enviando reseteo de clave.') };
         }
-        return { error };
     };
 
     const value: AuthContextType = {
         user,
-        session,
+        session: null, // Legacy compatibility
         profile,
         role,
         permissions,
@@ -346,3 +292,4 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         </AuthContext.Provider>
     );
 };
+

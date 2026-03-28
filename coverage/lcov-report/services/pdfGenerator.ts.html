@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/46</span>
+                <span class='fraction'>0/54</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/55</span>
+                <span class='fraction'>0/47</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/43</span>
+                <span class='fraction'>0/51</span>
             </div>
         
             
@@ -288,16 +288,27 @@
 <a name='L223'></a><a href='#L223'>223</a>
 <a name='L224'></a><a href='#L224'>224</a>
 <a name='L225'></a><a href='#L225'>225</a>
-<a name='L226'></a><a href='#L226'>226</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L226'></a><a href='#L226'>226</a>
+<a name='L227'></a><a href='#L227'>227</a>
+<a name='L228'></a><a href='#L228'>228</a>
+<a name='L229'></a><a href='#L229'>229</a>
+<a name='L230'></a><a href='#L230'>230</a>
+<a name='L231'></a><a href='#L231'>231</a>
+<a name='L232'></a><a href='#L232'>232</a>
+<a name='L233'></a><a href='#L233'>233</a>
+<a name='L234'></a><a href='#L234'>234</a>
+<a name='L235'></a><a href='#L235'>235</a>
+<a name='L236'></a><a href='#L236'>236</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -378,6 +389,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -517,6 +537,7 @@
 import { PermitRecord } from '../types';
 <span class="cstat-no" title="statement not covered" >import { formatLongDate, formatSimpleDate, toProperCase } from '../utils/formatters';</span>
 <span class="cstat-no" title="statement not covered" >import { CONFIG } from '../config';</span>
+<span class="cstat-no" title="statement not covered" >import { safeFLValue } from '../utils/flBalance';</span>
 &nbsp;
 export const <span class="cstat-no" title="statement not covered" >generateDecretoPDF = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >a</span>sync </span>(record: PermitRecord, forcePdf: boolean = <span class="branch-0 cbranch-no" title="branch not covered" >true)</span> =&gt; {</span>
   const pdfWindow = <span class="cstat-no" title="statement not covered" >window.open('about:blank', '_blank');</span>
@@ -603,7 +624,16 @@ export const <span class="cstat-no" title="statement not covered" >generateDecre
   };
 &nbsp;
   // Determinar si FL usa 1 o 2 períodos
-  const hasTwoPeriods = <span class="cstat-no" title="statement not covered" >typeCode === 'FL' &amp;&amp; record.periodo2 &amp;&amp; (record.solicitadoP2 || 0) &gt; 0;</span>
+  // Detectar si FL usa 2 períodos: requiere periodo2 con texto Y al menos un dato numérico de P2
+  const hasP2Data = <span class="cstat-no" title="statement not covered" >(record.solicitadoP2 || 0) &gt; 0 || (record.saldoDisponibleP2 || 0) &gt; 0;</span>
+  const hasTwoPeriods = <span class="cstat-no" title="statement not covered" >typeCode === 'FL' &amp;&amp; Boolean(record.periodo2 &amp;&amp; record.periodo2.trim() !== '') &amp;&amp; hasP2Data;</span>
+&nbsp;
+  const solP1 = <span class="cstat-no" title="statement not covered" >safeFLValue(record.solicitadoP1, record.cantidadDias || 0);</span>
+  const saldoFinP1 = <span class="cstat-no" title="statement not covered" >safeFLValue(record.saldoFinalP1, 0);</span>
+  const saldoDispP1 = <span class="cstat-no" title="statement not covered" >safeFLValue(record.saldoDisponibleP1, saldoFinP1 + solP1);</span>
+  const solP2 = <span class="cstat-no" title="statement not covered" >safeFLValue(record.solicitadoP2, 0);</span>
+  const saldoFinP2 = <span class="cstat-no" title="statement not covered" >safeFLValue(record.saldoFinalP2, 0);</span>
+  const saldoDispP2 = <span class="cstat-no" title="statement not covered" >safeFLValue(record.saldoDisponibleP2, saldoFinP2 + solP2);</span>
 &nbsp;
   // Campos específicos según tipo
   const payload = <span class="cstat-no" title="statement not covered" >typeCode === 'FL' ? {</span>
@@ -611,14 +641,14 @@ export const <span class="cstat-no" title="statement not covered" >generateDecre
     "templateId": hasTwoPeriods ? CONFIG.TEMPLATE_FL_2P_DOC_ID : CONFIG.TEMPLATE_FL_1P_DOC_ID,
     "Fecha_de_Término": formatLongDate(record.fechaTermino || ''),
     "Período_1": record.periodo1 || '',
-    "Saldo_Disponible_Periodo_1": (record.saldoDisponibleP1 || 0).toString().replace('.', ','),
-    "Solicitados_Periodo_1": (record.solicitadoP1 || 0).toString().replace('.', ','),
-    "Saldo_Final_Periodo_1": ((record.saldoDisponibleP1 || 0) - (record.solicitadoP1 || 0)).toString().replace('.', ','),
+    "Saldo_Disponible_Periodo_1": saldoDispP1.toString().replace('.', ','),
+    "Solicitados_Periodo_1": solP1.toString().replace('.', ','),
+    "Saldo_Final_Periodo_1": saldoFinP1.toString().replace('.', ','),
     ...(hasTwoPeriods ? {
       "Período_2": record.periodo2 || '',
-      "Saldo_Disponible_Periodo_2": (record.saldoDisponibleP2 || 0).toString().replace('.', ','),
-      "Solicitados_Periodo_2": (record.solicitadoP2 || 0).toString().replace('.', ','),
-      "Saldo_Final_Periodo_2": ((record.saldoDisponibleP2 || 0) - (record.solicitadoP2 || 0)).toString().replace('.', ','),
+      "Saldo_Disponible_Periodo_2": saldoDispP2.toString().replace('.', ','),
+      "Solicitados_Periodo_2": solP2.toString().replace('.', ','),
+      "Saldo_Final_Periodo_2": saldoFinP2.toString().replace('.', ','),
     } : {}),
   } : {
     ...basePayload,
@@ -745,7 +775,7 @@ export const <span class="cstat-no" title="statement not covered" >generateDecre
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-01T23:35:23.407Z
+                at 2026-03-28T18:58:23.017Z
             </div>
         <script src="../prettify.js"></script>
         <script>
