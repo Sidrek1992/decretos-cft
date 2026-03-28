@@ -33,8 +33,6 @@ import {
     saveUserRoles,
     loadUserProfiles,
     saveUserProfiles,
-    loadUserPasswords,
-    saveUserPasswords,
     loadUserSecurity,
     saveUserSecurity,
     updateUserSecurity,
@@ -42,6 +40,9 @@ import {
 } from '../utils/userAdminStorage';
 import { appendAuditLog, getAuditLog, fetchRemoteAuditLogs, AuditEntry } from '../utils/audit';
 import { subscribeToProfileChanges } from '../services/realtimeSync';
+import { logger } from '../utils/logger';
+
+const log = logger.create('AdminPanel');
 
 interface AdminPanelProps {
     isOpen: boolean;
@@ -56,7 +57,6 @@ interface ManagedUser {
     role: UserRole;
     firstName: string;
     lastName: string;
-    password: string;
     blocked: boolean;
     forcePasswordChange: boolean;
     lastAccessAt: number | null;
@@ -95,8 +95,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
 
     const [isResettingByEmail, setIsResettingByEmail] = useState<Record<string, boolean>>({});
     const [profileDrafts, setProfileDrafts] = useState<Record<string, { firstName: string; lastName: string }>>({});
-    const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
-    const [showPasswordByEmail, setShowPasswordByEmail] = useState<Record<string, boolean>>({});
     const [activeTab, setActiveTab] = useState<'users' | 'audit' | 'data_audit'>('users');
     const [remoteAuditLogs, setRemoteAuditLogs] = useState<AuditEntry[]>([]);
     const [isLoadingAudit, setIsLoadingAudit] = useState(false);
@@ -123,7 +121,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
     const loadUsers = useCallback(async () => {
         const roles = loadUserRoles();
         const profiles = loadUserProfiles();
-        const passwords = loadUserPasswords();
         const security = loadUserSecurity();
         const remoteProfilesByEmail: Record<string, { role: UserRole; firstName: string; lastName: string }> = {};
 
@@ -132,7 +129,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
                 .from('profiles')
                 .select('email, role, first_name, last_name');
 
-            (data || []).forEach((row: any) => {
+            (data || []).forEach((row) => {
                 const email = String(row?.email || '').trim().toLowerCase();
                 if (!email) return;
 
@@ -154,7 +151,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
         const emails = new Set<string>([
             ...Object.keys(roles),
             ...Object.keys(profiles),
-            ...Object.keys(passwords),
             ...Object.keys(security),
             ...Object.keys(remoteProfilesByEmail)
         ]);
@@ -170,7 +166,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
                     role: remoteProfile ? remoteProfile.role : (roles[email] || 'reader'),
                     firstName: remoteProfile ? remoteProfile.firstName : localProfile.firstName,
                     lastName: remoteProfile ? remoteProfile.lastName : localProfile.lastName,
-                    password: passwords[email] || '',
                     blocked: Boolean(sec.blocked),
                     forcePasswordChange: Boolean(sec.forcePasswordChange),
                     lastAccessAt: sec.lastAccessAt ?? null
@@ -274,10 +269,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
             profiles[email] = { firstName, lastName };
             saveUserProfiles(profiles);
 
-            const passwords = loadUserPasswords();
-            passwords[email] = createPassword;
-            saveUserPasswords(passwords);
-
             const security = loadUserSecurity();
             security[email] = { blocked: false, forcePasswordChange: false, lastAccessAt: null };
             saveUserSecurity(security);
@@ -305,11 +296,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
             setCreatePassword('');
             setCreateRole('reader');
             setShowCreatePassword(false);
-        } catch (err: any) {
-            if (err.message?.includes('already registered')) {
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al crear usuario';
+            if (message.includes('already registered')) {
                 setError('Este email ya está registrado');
             } else {
-                setError(err.message || 'Error al crear usuario');
+                setError(message);
             }
         } finally {
             setIsCreating(false);
@@ -363,10 +355,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
         delete profiles[email.toLowerCase()];
         saveUserProfiles(profiles);
 
-        const passwords = loadUserPasswords();
-        delete passwords[email.toLowerCase()];
-        saveUserPasswords(passwords);
-
         const security = loadUserSecurity();
         delete security[email.toLowerCase()];
         saveUserSecurity(security);
@@ -411,9 +399,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
 
         try {
             await upsertRemoteProfile({ email: normalizedEmail, role: userRole, firstName, lastName });
-        } catch (err: any) {
-            console.error('Save Profile Error:', err);
-            const detail = String(err?.message || '').trim();
+        } catch (err) {
+            log.error('Save Profile Error:', err);
+            const detail = (err instanceof Error ? err.message : '').trim();
             setError(detail
                 ? `Error de permisos: ${detail}. Asegúrate de haber ejecutado el script SQL de configuración en Supabase.`
                 : 'No se pudo guardar en la nube. Verifica que tu usuario sea Administrador en la tabla "profiles" o ejecuta el script SQL.');
@@ -460,40 +448,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
             });
 
             setSuccess(`Se envió un enlace de restablecimiento de contraseña a ${normalized}`);
-        } catch (err: any) {
-            setError(err.message || 'No se pudo iniciar el restablecimiento de contraseña');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'No se pudo iniciar el restablecimiento de contraseña');
         } finally {
             setIsResettingByEmail((prev) => ({ ...prev, [normalized]: false }));
         }
-    };
-
-    const handlePasswordDraftChange = (email: string, value: string) => {
-        setPasswordDrafts((prev) => ({ ...prev, [email]: value }));
-    };
-
-    const handleSavePasswordReference = (email: string) => {
-        const password = String(passwordDrafts[email] || '').trim();
-        if (password.length < 6) {
-            setError('La contraseña registrada debe tener al menos 6 caracteres');
-            return;
-        }
-
-        const passwords = loadUserPasswords();
-        passwords[email.toLowerCase()] = password;
-        saveUserPasswords(passwords);
-        appendAuditLog({
-            scope: 'admin',
-            action: 'save_password_reference',
-            actor: 'admin',
-            target: email,
-            details: 'Actualización de contraseña registrada en panel'
-        });
-        void loadUsers();
-        setSuccess(`Contraseña registrada actualizada para ${email}`);
-    };
-
-    const togglePasswordVisibility = (email: string) => {
-        setShowPasswordByEmail((prev) => ({ ...prev, [email]: !prev[email] }));
     };
 
     const handleToggleBlocked = (email: string, blocked: boolean) => {
@@ -624,23 +583,33 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
                                     <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Crear Nuevo Usuario</h3>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <input
-                                        type="text"
-                                        placeholder="Nombre"
-                                        value={createFirstName}
-                                        onChange={(e) => setCreateFirstName(e.target.value)}
-                                        className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                    />
-                                    <input
-                                        type="text"
-                                        placeholder="Apellido"
-                                        value={createLastName}
-                                        onChange={(e) => setCreateLastName(e.target.value)}
-                                        className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                    />
+                                    <div>
+                                        <label htmlFor="create-first-name" className="sr-only">Nombre</label>
+                                        <input
+                                            id="create-first-name"
+                                            type="text"
+                                            placeholder="Nombre"
+                                            value={createFirstName}
+                                            onChange={(e) => setCreateFirstName(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="create-last-name" className="sr-only">Apellido</label>
+                                        <input
+                                            id="create-last-name"
+                                            type="text"
+                                            placeholder="Apellido"
+                                            value={createLastName}
+                                            onChange={(e) => setCreateLastName(e.target.value)}
+                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                    </div>
                                     <div className="relative">
+                                        <label htmlFor="create-email" className="sr-only">Email</label>
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input
+                                            id="create-email"
                                             type="email"
                                             placeholder="Email"
                                             value={createEmail}
@@ -649,8 +618,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
                                         />
                                     </div>
                                     <div className="relative">
+                                        <label htmlFor="create-password" className="sr-only">Contraseña</label>
                                         <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input
+                                            id="create-password"
                                             type={showCreatePassword ? 'text' : 'password'}
                                             placeholder="Contraseña"
                                             value={createPassword}

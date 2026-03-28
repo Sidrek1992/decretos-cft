@@ -8,6 +8,7 @@
 import { PermitRecord } from '../types';
 import { formatLongDate, formatSimpleDate, toProperCase } from '../utils/formatters';
 import { CONFIG } from '../config';
+import { safeFLValue } from '../utils/flBalance';
 import { logger } from '../utils/logger';
 import JSZip from 'jszip';
 
@@ -58,15 +59,12 @@ const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fi
   const hasP2Data = (record.solicitadoP2 || 0) > 0 || (record.saldoDisponibleP2 || 0) > 0;
   const hasTwoPeriods = typeCode === 'FL' && Boolean(record.periodo2 && record.periodo2.trim() !== '') && hasP2Data;
 
-  // Para FL, usar saldoFinal almacenado en el record (calculado al crear el decreto)
-  // en vez de recalcular desde saldoDisponible - solicitado, ya que Google Sheets
-  // puede corromper números pequeños interpretándolos como fechas seriales.
-  const saldoDispP1 = record.saldoDisponibleP1 || 0;
-  const solP1 = record.solicitadoP1 || 0;
-  const saldoFinP1 = record.saldoFinalP1 ?? (saldoDispP1 - solP1);
-  const saldoDispP2 = record.saldoDisponibleP2 || 0;
-  const solP2 = record.solicitadoP2 || 0;
-  const saldoFinP2 = record.saldoFinalP2 ?? (saldoDispP2 - solP2);
+  const solP1 = safeFLValue(record.solicitadoP1, record.cantidadDias || 0);
+  const saldoFinP1 = safeFLValue(record.saldoFinalP1, 0);
+  const saldoDispP1 = safeFLValue(record.saldoDisponibleP1, saldoFinP1 + solP1);
+  const solP2 = safeFLValue(record.solicitadoP2, 0);
+  const saldoFinP2 = safeFLValue(record.saldoFinalP2, 0);
+  const saldoDispP2 = safeFLValue(record.saldoDisponibleP2, saldoFinP2 + solP2);
 
   const payload = typeCode === 'FL' ? {
     ...basePayload,

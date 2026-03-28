@@ -1,5 +1,6 @@
 
 import React, { useMemo } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { PermitRecord } from '../types';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
 import { getFLSaldoFinal } from '../utils/flBalance';
@@ -13,6 +14,7 @@ interface LowBalanceModalProps {
 }
 
 const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, records }) => {
+    const { containerRef, handleKeyDown } = useFocusTrap({ isActive: isOpen, onEscape: onClose });
     const lowBalanceEmployees = useMemo(() => {
         const balanceByEmployee: Record<string, {
             nombre: string;
@@ -80,6 +82,11 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
         <div
             className="fixed inset-0 z-[150] flex items-center justify-center p-4"
             onClick={onClose}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="low-balance-title"
+            ref={containerRef as React.RefObject<HTMLDivElement>}
+            onKeyDown={handleKeyDown}
         >
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
 
@@ -99,7 +106,7 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
                                 <TrendingDown className="w-6 h-6" />
                             </div>
                             <div>
-                                <h2 className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
+                                <h2 id="low-balance-title" className="text-lg sm:text-xl font-extrabold uppercase tracking-tight">
                                     Alerta de Saldo Bajo
                                 </h2>
                                 <p className="text-[10px] sm:text-[11px] font-bold uppercase opacity-80 tracking-wider mt-1">
@@ -110,6 +117,7 @@ const LowBalanceModal: React.FC<LowBalanceModalProps> = ({ isOpen, onClose, reco
 
                         <button
                             onClick={onClose}
+                            aria-label="Cerrar alerta de saldo bajo"
                             className="p-2.5 hover:bg-white/20 rounded-xl transition-all border border-white/20"
                         >
                             <X className="w-5 h-5" />

@@ -13,6 +13,8 @@ Object.defineProperty(globalThis, 'import', {
         VITE_DECRETOS_SHEET_ID: 'test-sheet-id',
         VITE_FERIADOS_SHEET_ID: 'test-feriados-sheet-id',
         VITE_EMPLOYEES_SHEET_ID: 'test-employees-sheet-id',
+        VITE_SUPABASE_URL: 'https://test.supabase.co',
+        VITE_SUPABASE_ANON_KEY: 'test-anon-key',
       },
     },
   },

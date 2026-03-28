@@ -3,6 +3,7 @@ import { PermitRecord } from '../types';
 import { X, FileText, User, Calendar, Clock, Hash, Building, Award } from 'lucide-react';
 import { formatLongDate, formatSimpleDate, toProperCase } from '../utils/formatters';
 import { hasFLSecondPeriod } from '../utils/flBalance';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface DecreePreviewModalProps {
     isOpen: boolean;
@@ -12,6 +13,8 @@ interface DecreePreviewModalProps {
 }
 
 const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose, record, onConfirm }) => {
+    const { containerRef, handleKeyDown } = useFocusTrap({ isActive: isOpen, onEscape: onClose });
+
     if (!isOpen || !record) return null;
 
     const isFL = record.solicitudType === 'FL';
@@ -32,7 +35,7 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
     const nombreProperCase = toProperCase(record.funcionario);
 
     return (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="decree-preview-title" ref={containerRef as React.RefObject<HTMLDivElement>} onKeyDown={handleKeyDown}>
             <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
             <div className="relative w-full max-w-2xl max-h-[90vh] bg-white dark:bg-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
 
@@ -44,11 +47,11 @@ const DecreePreviewModal: React.FC<DecreePreviewModalProps> = ({ isOpen, onClose
                                 <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
                             </div>
                             <div>
-                                <h2 className="text-base sm:text-lg font-bold">Previsualización del Decreto</h2>
+                                <h2 id="decree-preview-title" className="text-base sm:text-lg font-bold">Previsualización del Decreto</h2>
                                 <p className="text-[10px] sm:text-xs opacity-70">Revisa los datos antes de generar</p>
                             </div>
                         </div>
-                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                        <button onClick={onClose} aria-label="Cerrar previsualización" className="p-2 hover:bg-white/10 rounded-xl transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>

@@ -119,7 +119,7 @@ const DataAuditorView: React.FC<DataAuditorViewProps> = ({ records, employees = 
                 <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-1 hidden sm:block" />
                 <select
                     value={filter}
-                    onChange={(e) => setFilter(e.target.value as any)}
+                    onChange={(e) => setFilter(e.target.value as typeof filter)}
                     className="bg-transparent text-xs font-black uppercase tracking-wider outline-none cursor-pointer px-2"
                 >
                     <option value="all">Todo el Riesgo</option>
@@ -128,7 +128,7 @@ const DataAuditorView: React.FC<DataAuditorViewProps> = ({ records, employees = 
                 </select>
                 <select
                     value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value as any)}
+                    onChange={(e) => setCategoryFilter(e.target.value as typeof categoryFilter)}
                     className="bg-transparent text-xs font-black uppercase tracking-wider outline-none cursor-pointer px-2"
                 >
                     <option value="all">Todas las Categorías</option>

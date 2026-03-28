@@ -29,7 +29,6 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
-        continue-on-error: true
 
   test:
     name: Unit Tests
@@ -86,6 +85,8 @@ jobs:
           VITE_DECRETOS_SHEET_ID: ${{ secrets.VITE_DECRETOS_SHEET_ID }}
           VITE_FERIADOS_SHEET_ID: ${{ secrets.VITE_FERIADOS_SHEET_ID }}
           VITE_EMPLOYEES_SHEET_ID: ${{ secrets.VITE_EMPLOYEES_SHEET_ID }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

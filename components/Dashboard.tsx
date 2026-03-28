@@ -31,6 +31,9 @@ import { normalizeSearchText } from '../utils/search';
 import { normalizeRutCanonical } from '../utils/rutIntegrity';
 import { CONFIG } from '../config';
 import OperationalOverview from './OperationalOverview';
+import { logger } from '../utils/logger';
+
+const log = logger.create('Dashboard');
 
 interface DashboardProps {
     records: PermitRecord[];
@@ -308,7 +311,7 @@ const KpiDetailPanel: React.FC<KpiDetailPanelProps> = ({ data, onClose }) => {
             XLSX.utils.book_append_sheet(wb, ws, 'Detalle KPI');
             XLSX.writeFile(wb, `${safeTitle || 'detalle_kpi'}_${new Date().toISOString().split('T')[0]}.xlsx`);
         } catch (error) {
-            console.error('Error exportando detalle a Excel:', error);
+            log.error('Error exportando detalle a Excel:', error);
         } finally {
             setIsExportingExcel(false);
         }
@@ -384,7 +387,7 @@ const KpiDetailPanel: React.FC<KpiDetailPanelProps> = ({ data, onClose }) => {
             `);
             printWindow.document.close();
         } catch (error) {
-            console.error('Error exportando detalle a PDF:', error);
+            log.error('Error exportando detalle a PDF:', error);
         } finally {
             setIsExportingPdf(false);
         }
@@ -581,7 +584,7 @@ const Dashboard: React.FC<DashboardProps> = ({ records, employees }) => {
         try {
             await exportDashboardToPDF('dashboard-content', 'Reporte GDP Cloud - Resumen de Gestión');
         } catch (error) {
-            console.error('Error al exportar Dashboard:', error);
+            log.error('Error al exportar Dashboard:', error);
         } finally {
             setIsExporting(false);
         }

@@ -5,6 +5,9 @@ import { UserRole, Permissions, getPermissions, hasPermission, ROLE_LABELS, ROLE
 import { appendAuditLog } from '../utils/audit';
 import { getUserSecurityByEmail, isMandatoryAdminEmail, loadUserRoles, touchUserLastAccess, updateUserSecurity } from '../utils/userAdminStorage';
 import { subscribeToProfileChanges } from '../services/realtimeSync';
+import { logger } from '../utils/logger';
+
+const log = logger.create('Auth');
 
 interface UserProfile {
     id: string;
@@ -112,7 +115,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setTimeout(() => reject(new Error('Timeout loading profile')), 5000)
             );
 
-            const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+            const { data, error } = await Promise.race([profilePromise, timeoutPromise as Promise<never>]);
 
             if (!error && data?.role) {
                 const dbRole = String(data.role).toLowerCase();
@@ -127,12 +130,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     lastName: String(data.last_name || '').trim(),
                     created_at: String(data.created_at || new Date().toISOString())
                 });
-                console.log('Auth: Perfil cargado exitosamente desde DB');
+                log.debug('Perfil cargado exitosamente desde DB');
                 return;
             }
-            if (error) console.error('Auth: Error en consulta de perfil:', error);
+            if (error) log.error('Error en consulta de perfil:', error);
         } catch (err) {
-            console.warn('Auth: No se pudo cargar perfil remoto (usando fallback local):', err);
+            log.warn('No se pudo cargar perfil remoto (usando fallback local):', err);
         }
 
         setProfile(null);
@@ -141,18 +144,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     useEffect(() => {
         // Obtener sesión actual
         const getSession = async () => {
-            console.log('Auth: Iniciando verificación de sesión...');
+            log.debug('Iniciando verificación de sesión...');
             try {
                 const { data: { session }, error } = await supabase.auth.getSession();
 
                 if (error) {
-                    console.error('Auth: Error obteniendo sesión:', error);
+                    log.error('Error obteniendo sesión:', error);
                     setLoading(false);
                     return;
                 }
 
                 if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
-                    console.warn('Auth: Usuario bloqueado:', session.user.email);
+                    log.warn('Usuario bloqueado:', session.user.email);
                     await supabase.auth.signOut();
                     setSession(null);
                     setUser(null);
@@ -164,16 +167,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setUser(session?.user ?? null);
 
                 if (session?.user) {
-                    console.log('Auth: Sesión encontrada para', session.user.email, '- Cargando perfil...');
+                    log.debug('Sesión encontrada para', session.user.email, '- Cargando perfil...');
                     await loadProfile(session.user.id, session.user.email);
                 } else {
-                    console.log('Auth: No se encontró sesión activa');
+                    log.debug('No se encontró sesión activa');
                 }
             } catch (err) {
-                console.error('Auth: Error crítico en getSession:', err);
+                log.error('Error crítico en getSession:', err);
             } finally {
                 setLoading(false);
-                console.log('Auth: Verificación de sesión finalizada.');
+                log.debug('Verificación de sesión finalizada.');
             }
         };
 
@@ -182,7 +185,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Escuchar cambios de autenticación
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
-                console.log('Auth: Cambio de estado detectado:', event);
+                log.debug('Cambio de estado detectado:', event);
                 try {
                     if (session?.user?.email && getUserSecurityByEmail(session.user.email).blocked) {
                         await supabase.auth.signOut();
@@ -205,7 +208,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         }
                     }
                 } catch (err) {
-                    console.error('Auth: Error en handler de onAuthStateChange:', err);
+                    log.error('Error en handler de onAuthStateChange:', err);
                 } finally {
                     setLoading(false);
                 }

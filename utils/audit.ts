@@ -1,4 +1,7 @@
 import { supabase } from '../lib/supabase';
+import { logger } from './logger';
+
+const log = logger.create('Audit');
 
 export type AuditScope = 'decree' | 'admin' | 'auth';
 
@@ -67,7 +70,7 @@ export const appendAuditLog = async (entry: Omit<AuditEntry, 'id' | 'timestamp'>
       });
     }
   } catch (e) {
-    console.warn('No se pudo guardar el log de auditoría en la nube:', e);
+    log.warn('No se pudo guardar el log de auditoría en la nube:', e);
   }
 };
 
@@ -99,7 +102,7 @@ export const fetchRemoteAuditLogs = async (limit = 100): Promise<AuditEntry[]> =
       new_data: row.new_data
     }));
   } catch (e) {
-    console.error('Error al recuperar logs remotos:', e);
+    log.error('Error al recuperar logs remotos:', e);
     return [];
   }
 };

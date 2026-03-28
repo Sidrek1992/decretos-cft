@@ -13,6 +13,9 @@ import ScrollToTop from './components/ScrollToTop';
 import WelcomeBanner from './components/WelcomeBanner';
 import OperationalOverview from './components/OperationalOverview';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { logger } from './utils/logger';
+
+const log = logger.create('App');
 
 // Lazy load heavy modals for better initial performance
 const EmployeeManagement = lazy(() => import('./components/EmployeeManagement'));
@@ -52,7 +55,7 @@ import { getFLSaldoFinal } from './utils/flBalance';
 import { compareRecordsByDateDesc } from './utils/recordDates';
 import { normalizeRutCanonical } from './utils/rutIntegrity';
 import { appendAuditLog } from './utils/audit';
-import { auditRecords } from './utils/dataAuditor';
+import { auditRecords, AuditIssue } from './utils/dataAuditor';
 import { CONFIG } from './config';
 import {
   Cloud, FileSpreadsheet, ExternalLink, RefreshCw, LayoutDashboard, BookOpen, BarChart3,
@@ -369,7 +372,7 @@ const AppContent: React.FC = () => {
     syncEmployeesToCloud
   } = useEmployeeSync(
     () => { }, // onSuccess silencioso para empleados
-    (error) => console.warn('Error empleados:', error),
+    (error) => log.warn('Error empleados:', error),
     user?.email
   );
 
@@ -412,13 +415,13 @@ const AppContent: React.FC = () => {
     try {
       return auditRecords(records || [], employees || []);
     } catch (e) {
-      console.error("Auditor error:", e);
+      log.error("Auditor error:", e);
       return [];
     }
   }, [records, employees, role]);
 
   const criticalIssuesCount = useMemo(() =>
-    Array.isArray(auditIssues) ? auditIssues.filter((i: any) => i.type === 'error').length : 0,
+    Array.isArray(auditIssues) ? auditIssues.filter((i: AuditIssue) => i.type === 'error').length : 0,
     [auditIssues]);
 
   // Hook centralizado para modales

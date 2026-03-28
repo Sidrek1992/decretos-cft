@@ -52,7 +52,10 @@ export const CONFIG = {
     BASE_DAYS: {
         PA: 6,
         FL: 15
-    }
+    },
+
+    // Máximo saldo posible de feriado legal (usado para detectar corrupción de datos en Sheets)
+    MAX_SALDO_DIAS: 366
 } as const;
 
 // Validar RUT chileno — delega a la implementación canónica en rutIntegrity

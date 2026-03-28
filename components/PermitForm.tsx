@@ -7,6 +7,9 @@ import {
   PlusCircle, Save, X, FileUp, Loader2, Sparkles, User, Fingerprint,
   Calendar, Info, ChevronDown, CheckCircle2, AlertCircle, AlertTriangle, Clock, Sun
 } from 'lucide-react';
+import { logger } from '../utils/logger';
+
+const log = logger.create('PermitForm');
 import { formatRut, toProperCase } from '../utils/formatters';
 import { extractDataFromPdf, extractFLDataFromPdf } from '../utils/aiProcessor';
 import { compareRecordsByDateDesc } from '../utils/recordDates';
@@ -351,7 +354,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
-      console.error('[AI] Error al procesar PDF:', err);
+      log.error('Error al procesar PDF:', err);
       setFormError(message || "Error al procesar PDF con IA. Por favor, ingresa los datos manualmente.");
     } finally {
       setIsProcessing(false);
@@ -713,7 +716,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
         {/* Form Body */}
         <div className="p-4 sm:p-6 md:p-8 lg:p-10 space-y-6 sm:space-y-8">
           {formError && (
-            <div className="bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 p-4 rounded-2xl flex items-center gap-3">
+            <div role="alert" aria-live="assertive" className="bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 p-4 rounded-2xl flex items-center gap-3">
               <AlertCircle className="text-red-500 flex-shrink-0" />
               <p className="text-xs sm:text-sm font-bold text-red-700 dark:text-red-300">{formError}</p>
             </div>
@@ -768,6 +771,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
                     onFocus={() => setShowSuggestions(true)}
                     autoComplete="off"
                     placeholder="BUSCAR FUNCIONARIO POR NOMBRE O RUT..."
+                    aria-invalid={!!errors.funcionario}
                     className={`w-full pl-12 pr-12 py-4 bg-white dark:bg-slate-700 border rounded-xl font-black text-slate-800 dark:text-white uppercase focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-900/50 outline-none transition-all text-sm ${errors.funcionario ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                   />
                   <button type="button" onClick={() => setShowSuggestions(!showSuggestions)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600">
@@ -880,6 +884,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
                     onChange={handleChange}
                     min="0.5"
                     max="30"
+                    aria-invalid={!!errors.cantidadDias}
                     className={`w-full bg-white dark:bg-slate-700 border px-4 py-3 rounded-xl font-black text-slate-900 dark:text-white outline-none focus:border-indigo-500 text-center text-sm ${errors.cantidadDias ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                   />
                 </div>
@@ -894,6 +899,7 @@ const PermitForm: React.FC<PermitFormProps> = ({
                     name="fechaInicio"
                     value={formData.fechaInicio}
                     onChange={handleChange}
+                    aria-invalid={!!errors.fechaInicio}
                     className={`w-full bg-white dark:bg-slate-700 border px-4 py-3 rounded-xl font-bold text-slate-800 dark:text-white outline-none focus:border-indigo-500 text-sm ${errors.fechaInicio ? 'border-red-300' : 'border-slate-200 dark:border-slate-600'}`}
                   />
                   {formData.fechaInicio && (

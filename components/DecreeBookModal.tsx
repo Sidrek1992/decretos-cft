@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { PermitRecord } from '../types';
 import {
     X, FileText, Download, Calendar, Printer, Search,
@@ -17,6 +18,7 @@ interface DecreeBookModalProps {
 }
 
 const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, records }) => {
+    const { containerRef, handleKeyDown } = useFocusTrap({ isActive: isOpen, onEscape: onClose });
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
 
@@ -166,7 +168,7 @@ const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, reco
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="decreto-book-title" ref={containerRef as React.RefObject<HTMLDivElement>} onKeyDown={handleKeyDown}>
             {/* Background Backdrop */}
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xl transition-opacity animate-in fade-in duration-300" />
 
@@ -187,7 +189,7 @@ const DecreeBookModal: React.FC<DecreeBookModalProps> = ({ isOpen, onClose, reco
                                 <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                             </div>
                             <div>
-                                <h2 className="text-xl sm:text-3xl font-black tracking-tight text-white uppercase">Libro de Decretos</h2>
+                                <h2 id="decreto-book-title" className="text-xl sm:text-3xl font-black tracking-tight text-white uppercase">Libro de Decretos</h2>
                                 <div className="flex items-center gap-3 mt-1 opacity-90">
                                     <div className="flex items-center gap-1 text-xs sm:text-sm font-bold bg-white/10 px-2 py-0.5 rounded-lg border border-white/10">
                                         <Calendar className="w-3.5 h-3.5" />

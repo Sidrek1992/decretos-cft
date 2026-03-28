@@ -1,4 +1,5 @@
 import { PermitRecord } from '../types';
+import { CONFIG } from '../config';
 
 type FLBalanceRecord = Pick<PermitRecord, 'periodo2' | 'saldoFinalP1' | 'saldoFinalP2' | 'solicitadoP2' | 'saldoDisponibleP2'>;
 
@@ -23,3 +24,13 @@ export function getFLSaldoFinal(record: FLBalanceRecord, fallback: number | null
 
   return saldo ?? fallback;
 }
+
+/**
+ * Sanitiza valores FL que Google Sheets puede corromper.
+ * Números pequeños (ej: 15) a veces se interpretan como fechas seriales (~1900).
+ * Si el valor supera MAX_SALDO_DIAS (imposible para feriado legal), usa el fallback.
+ */
+export const safeFLValue = (raw: number | undefined, fallback: number): number => {
+  const val = raw || 0;
+  return val > CONFIG.MAX_SALDO_DIAS ? fallback : val;
+};

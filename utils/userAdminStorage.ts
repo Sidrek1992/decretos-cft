@@ -13,7 +13,6 @@ export interface ManagedSecurity {
 
 const ROLES_STORAGE_KEY = 'gdp_user_roles';
 const USER_PROFILES_STORAGE_KEY = 'gdp_user_profiles';
-const USER_PASSWORDS_STORAGE_KEY = 'gdp_user_passwords';
 const USER_SECURITY_STORAGE_KEY = 'gdp_user_security';
 export const MANDATORY_ADMIN_EMAILS = [
   'mguzmanahumada@gmail.com',
@@ -89,24 +88,6 @@ export const loadUserProfiles = (): Record<string, ManagedProfile> => {
 
 export const saveUserProfiles = (profiles: Record<string, ManagedProfile>) => {
   localStorage.setItem(USER_PROFILES_STORAGE_KEY, JSON.stringify(profiles));
-};
-
-export const loadUserPasswords = (): Record<string, string> => {
-  try {
-    const raw = localStorage.getItem(USER_PASSWORDS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    return Object.entries(parsed).reduce<Record<string, string>>((acc, [email, pwd]) => {
-      acc[normalizeEmail(email)] = String(pwd || '');
-      return acc;
-    }, {});
-  } catch {
-    return {};
-  }
-};
-
-export const saveUserPasswords = (passwords: Record<string, string>) => {
-  localStorage.setItem(USER_PASSWORDS_STORAGE_KEY, JSON.stringify(passwords));
 };
 
 export const loadUserSecurity = (): Record<string, ManagedSecurity> => {

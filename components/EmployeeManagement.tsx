@@ -81,20 +81,46 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const employeeStats = useMemo(() => {
+        // Construir índices para evitar O(n*m) en la búsqueda de registros
+        const byRut = new Map<string, PermitRecord[]>();
+        const byName = new Map<string, PermitRecord[]>();
+        for (const r of records) {
+            const rut = normalizeRutCanonical(r.rut) || r.rut;
+            const name = normalizeIdentityName(r.funcionario);
+            if (!byRut.has(rut)) byRut.set(rut, []);
+            byRut.get(rut)!.push(r);
+            if (!byName.has(name)) byName.set(name, []);
+            byName.get(name)!.push(r);
+        }
+
         const stats: Record<string, EmployeeStats> = {};
         employees.forEach(emp => {
             const canonicalEmpRut = normalizeRutCanonical(emp.rut);
-            const empRecords = records.filter(r =>
-                normalizeRutCanonical(r.rut) === canonicalEmpRut ||
-                normalizeIdentityName(r.funcionario) === normalizeIdentityName(emp.nombre)
-            );
-            const diasPA = empRecords.filter(r => r.solicitudType === 'PA').reduce((sum, r) => sum + r.cantidadDias, 0);
-            const diasFL = empRecords.filter(r => r.solicitudType === 'FL').reduce((sum, r) => sum + r.cantidadDias, 0);
+            const empName = normalizeIdentityName(emp.nombre);
+            // Unir registros por RUT y por nombre (sin duplicados)
+            const rutRecords = byRut.get(canonicalEmpRut || emp.rut) || [];
+            const nameRecords = byName.get(empName) || [];
+            const seen = new Set<PermitRecord>(rutRecords);
+            const empRecords = [...rutRecords];
+            for (const r of nameRecords) {
+                if (!seen.has(r)) empRecords.push(r);
+            }
+
+            let diasPA = 0, diasFL = 0;
+            let lastPA: PermitRecord | null = null;
+            let lastFL: PermitRecord | null = null;
+            for (const r of empRecords) {
+                if (r.solicitudType === 'PA') {
+                    diasPA += r.cantidadDias;
+                    if (!lastPA || compareRecordsByDateDesc(lastPA, r, 'fechaInicio') > 0) lastPA = r;
+                } else if (r.solicitudType === 'FL') {
+                    diasFL += r.cantidadDias;
+                    if (!lastFL || compareRecordsByDateDesc(lastFL, r, 'fechaInicio') > 0) lastFL = r;
+                }
+            }
             const sortedDecrees = [...empRecords].sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'));
-            const lastPA = empRecords.filter(r => r.solicitudType === 'PA').sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'))[0];
             const diasHaber = lastPA ? lastPA.diasHaber : 6;
             const saldo = lastPA ? lastPA.diasHaber - lastPA.cantidadDias : 6;
-            const lastFL = empRecords.filter(r => r.solicitudType === 'FL').sort((a, b) => compareRecordsByDateDesc(a, b, 'fechaInicio'))[0];
             const saldoFL = lastFL ? getFLSaldoFinal(lastFL, 0) : 0;
             stats[emp.rut] = { totalDecrees: empRecords.length, diasPA, diasFL, diasHaber, saldo, saldoFL, lastDecree: sortedDecrees[0] || null, decrees: sortedDecrees };
         });
@@ -228,7 +254,9 @@ const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Funcionarios');
             XLSX.writeFile(wb, `funcionarios_${new Date().toISOString().split('T')[0]}.xlsx`);
-        } catch (err) { }
+        } catch (err) {
+            employeeManagementLogger.error('Error exportando empleados a Excel:', err);
+        }
     };
 
     const startEdit = (emp: Employee) => {
