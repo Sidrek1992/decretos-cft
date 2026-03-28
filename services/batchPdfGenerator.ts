@@ -82,6 +82,7 @@ const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fi
     } : {}),
   } : {
     ...basePayload,
+    "templateId": CONFIG.TEMPLATE_DOC_ID,
     "Tipo_de_Jornada": (record.tipoJornada || '').replace(/[()]/g, '').trim(),
     "Días_a_su_haber": Number(record.diasHaber || 0).toFixed(1).replace('.', ','),
     "Saldo_final": (Number(record.diasHaber || 0) - Number(record.cantidadDias || 0)).toFixed(1).replace('.', ','),

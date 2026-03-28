@@ -7,10 +7,10 @@ import { safeFLValue } from '../utils/flBalance';
 export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean = true) => {
   const pdfWindow = window.open('about:blank', '_blank');
 
-  const typeCode = record.solicitudType;
-  const nombreMayuscula = record.funcionario.toUpperCase().trim();
-  const nombreProperCase = toProperCase(record.funcionario);
-  const actoOficial = record.acto.trim();
+  const typeCode = record.solicitudType || 'PA';
+  const nombreMayuscula = (record.funcionario || '').toUpperCase().trim();
+  const nombreProperCase = toProperCase(record.funcionario || '');
+  const actoOficial = (record.acto || '').trim();
 
   // Nombre exacto solicitado: SGDP-PA N° 013/2026 - NOMBRE
   const finalFileName = `SGDP-${typeCode} N° ${actoOficial} - ${nombreMayuscula}`;
@@ -80,12 +80,12 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
     "FUNCIONARIO": nombreMayuscula,
     "Funcionario": nombreProperCase,
     "solicitudType": typeCode,
-    "RUT": record.rut.trim(),
-    "Fecha": formatSimpleDate(record.fechaDecreto),
-    "Cantidad_de_días": record.cantidadDias.toString().replace('.', ','),
-    "Fecha_de_inicio": formatLongDate(record.fechaInicio),
-    "RA": record.ra,
-    "Emite": record.emite
+    "RUT": (record.rut || '').trim(),
+    "Fecha": formatSimpleDate(record.fechaDecreto || ''),
+    "Cantidad_de_días": Number(record.cantidadDias || 0).toString().replace('.', ','),
+    "Fecha_de_inicio": formatLongDate(record.fechaInicio || ''),
+    "RA": record.ra || '',
+    "Emite": record.emite || ''
   };
 
   // Determinar si FL usa 1 o 2 períodos
@@ -93,12 +93,12 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
   const hasP2Data = (record.solicitadoP2 || 0) > 0 || (record.saldoDisponibleP2 || 0) > 0;
   const hasTwoPeriods = typeCode === 'FL' && Boolean(record.periodo2 && record.periodo2.trim() !== '') && hasP2Data;
 
-  const solP1 = safeFLValue(record.solicitadoP1, record.cantidadDias || 0);
-  const saldoFinP1 = safeFLValue(record.saldoFinalP1, 0);
-  const saldoDispP1 = safeFLValue(record.saldoDisponibleP1, saldoFinP1 + solP1);
-  const solP2 = safeFLValue(record.solicitadoP2, 0);
-  const saldoFinP2 = safeFLValue(record.saldoFinalP2, 0);
-  const saldoDispP2 = safeFLValue(record.saldoDisponibleP2, saldoFinP2 + solP2);
+  const solP1 = Number(safeFLValue(Number(record.solicitadoP1), Number(record.cantidadDias || 0)));
+  const saldoFinP1 = Number(safeFLValue(Number(record.saldoFinalP1), 0));
+  const saldoDispP1 = Number(safeFLValue(Number(record.saldoDisponibleP1), saldoFinP1 + solP1));
+  const solP2 = Number(safeFLValue(Number(record.solicitadoP2), 0));
+  const saldoFinP2 = Number(safeFLValue(Number(record.saldoFinalP2), 0));
+  const saldoDispP2 = Number(safeFLValue(Number(record.saldoDisponibleP2), saldoFinP2 + solP2));
 
   // Campos específicos según tipo
   const payload = typeCode === 'FL' ? {
@@ -117,9 +117,10 @@ export const generateDecretoPDF = async (record: PermitRecord, forcePdf: boolean
     } : {}),
   } : {
     ...basePayload,
-    "Tipo_de_Jornada": record.tipoJornada.replace(/[()]/g, '').trim(),
-    "Días_a_su_haber": record.diasHaber.toFixed(1).replace('.', ','),
-    "Saldo_final": (record.diasHaber - record.cantidadDias).toFixed(1).replace('.', ','),
+    "templateId": CONFIG.TEMPLATE_DOC_ID,
+    "Tipo_de_Jornada": (record.tipoJornada || '').replace(/[()]/g, '').trim(),
+    "Días_a_su_haber": Number(record.diasHaber || 0).toFixed(1).replace('.', ','),
+    "Saldo_final": (Number(record.diasHaber || 0) - Number(record.cantidadDias || 0)).toFixed(1).replace('.', ','),
   };
 
   try {
