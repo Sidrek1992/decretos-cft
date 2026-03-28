@@ -10,7 +10,7 @@ const DEFAULT_SHEET_ID = '1BmMABAHk8ZgpUlXzsyI33qQGtsk5mrKnf5qzgQp4US0';
 
 // Configuración de Gemini - Añadir la API key en las propiedades del script
 // PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', 'tu-api-key');
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
 /**
  * ============================================
