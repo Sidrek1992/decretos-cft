@@ -35,10 +35,10 @@ export interface BatchProgressInfo {
  * Retorna el blob + nombre del archivo para descarga directa
  */
 const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fileName: string } | null> => {
-  const typeCode = record.solicitudType;
-  const nombreMayuscula = record.funcionario.toUpperCase().trim();
-  const nombreProperCase = toProperCase(record.funcionario);
-  const actoOficial = record.acto.trim();
+  const typeCode = record.solicitudType || 'PA';
+  const nombreMayuscula = (record.funcionario || '').toUpperCase().trim();
+  const nombreProperCase = toProperCase(record.funcionario || '');
+  const actoOficial = (record.acto || '').trim();
   const finalFileName = `SGDP-${typeCode} N° ${actoOficial} - ${nombreMayuscula}`;
 
   const basePayload = {
@@ -47,24 +47,24 @@ const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fi
     "FUNCIONARIO": nombreMayuscula,
     "Funcionario": nombreProperCase,
     "solicitudType": typeCode,
-    "RUT": record.rut.trim(),
-    "Fecha": formatSimpleDate(record.fechaDecreto),
-    "Cantidad_de_días": record.cantidadDias.toString().replace('.', ','),
-    "Fecha_de_inicio": formatLongDate(record.fechaInicio),
-    "RA": record.ra,
-    "Emite": record.emite
+    "RUT": (record.rut || '').trim(),
+    "Fecha": formatSimpleDate(record.fechaDecreto || ''),
+    "Cantidad_de_días": Number(record.cantidadDias || 0).toString().replace('.', ','),
+    "Fecha_de_inicio": formatLongDate(record.fechaInicio || ''),
+    "RA": record.ra || '',
+    "Emite": record.emite || ''
   };
 
   // Detectar si FL usa 2 períodos: requiere periodo2 con texto Y al menos un dato numérico de P2
   const hasP2Data = (record.solicitadoP2 || 0) > 0 || (record.saldoDisponibleP2 || 0) > 0;
   const hasTwoPeriods = typeCode === 'FL' && Boolean(record.periodo2 && record.periodo2.trim() !== '') && hasP2Data;
 
-  const solP1 = safeFLValue(record.solicitadoP1, record.cantidadDias || 0);
-  const saldoFinP1 = safeFLValue(record.saldoFinalP1, 0);
-  const saldoDispP1 = safeFLValue(record.saldoDisponibleP1, saldoFinP1 + solP1);
-  const solP2 = safeFLValue(record.solicitadoP2, 0);
-  const saldoFinP2 = safeFLValue(record.saldoFinalP2, 0);
-  const saldoDispP2 = safeFLValue(record.saldoDisponibleP2, saldoFinP2 + solP2);
+  const solP1 = Number(safeFLValue(Number(record.solicitadoP1), Number(record.cantidadDias || 0)));
+  const saldoFinP1 = Number(safeFLValue(Number(record.saldoFinalP1), 0));
+  const saldoDispP1 = Number(safeFLValue(Number(record.saldoDisponibleP1), saldoFinP1 + solP1));
+  const solP2 = Number(safeFLValue(Number(record.solicitadoP2), 0));
+  const saldoFinP2 = Number(safeFLValue(Number(record.saldoFinalP2), 0));
+  const saldoDispP2 = Number(safeFLValue(Number(record.saldoDisponibleP2), saldoFinP2 + solP2));
 
   const payload = typeCode === 'FL' ? {
     ...basePayload,
@@ -82,9 +82,9 @@ const generatePDFSilent = async (record: PermitRecord): Promise<{ blob: Blob; fi
     } : {}),
   } : {
     ...basePayload,
-    "Tipo_de_Jornada": record.tipoJornada.replace(/[()]/g, '').trim(),
-    "Días_a_su_haber": record.diasHaber.toFixed(1).replace('.', ','),
-    "Saldo_final": (record.diasHaber - record.cantidadDias).toFixed(1).replace('.', ','),
+    "Tipo_de_Jornada": (record.tipoJornada || '').replace(/[()]/g, '').trim(),
+    "Días_a_su_haber": Number(record.diasHaber || 0).toFixed(1).replace('.', ','),
+    "Saldo_final": (Number(record.diasHaber || 0) - Number(record.cantidadDias || 0)).toFixed(1).replace('.', ','),
   };
 
   const scriptUrl = typeCode === 'FL'
