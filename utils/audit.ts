@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, addDoc, getDocs, query, orderBy, limit as firestoreLimit } from 'firebase/firestore';
 import { logger } from './logger';
 
 const log = logger.create('Audit');
@@ -55,18 +56,19 @@ export const appendAuditLog = async (entry: Omit<AuditEntry, 'id' | 'timestamp'>
   const current = readAuditLog();
   writeAuditLog([next, ...current]);
 
-  // 2. Intentar guardar en Supabase (si hay conexión)
+  // 2. Intentar guardar en Firebase (si hay conexión)
   try {
     if (navigator.onLine) {
-      await supabase.from('audit_logs').insert({
+      await addDoc(collection(db, 'audit_logs'), {
         scope: entry.scope,
         action: entry.action,
         actor_email: entry.actor,
-        target_id: entry.target_id,
-        target_name: entry.target,
-        old_data: entry.old_data,
-        new_data: entry.new_data,
-        details: entry.details,
+        target_id: entry.target_id || null,
+        target_name: entry.target || null,
+        old_data: entry.old_data || null,
+        new_data: entry.new_data || null,
+        details: entry.details || null,
+        created_at: new Date().toISOString()
       });
     }
   } catch (e) {
@@ -81,26 +83,28 @@ export const getAuditLog = (scope?: AuditScope): AuditEntry[] => {
 
 export const fetchRemoteAuditLogs = async (limit = 100): Promise<AuditEntry[]> => {
   try {
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const q = query(
+      collection(db, 'audit_logs'),
+      orderBy('created_at', 'desc'),
+      firestoreLimit(limit)
+    );
+    const snapshot = await getDocs(q);
 
-    if (error) throw error;
-
-    return (data || []).map(row => ({
-      id: row.id,
-      scope: row.scope as AuditScope,
-      action: row.action,
-      actor: row.actor_email,
-      target: row.target_name,
-      target_id: row.target_id,
-      details: row.details,
-      timestamp: new Date(row.created_at).getTime(),
-      old_data: row.old_data,
-      new_data: row.new_data
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        scope: data.scope as AuditScope,
+        action: data.action,
+        actor: data.actor_email,
+        target: data.target_name,
+        target_id: data.target_id,
+        details: data.details,
+        timestamp: new Date(data.created_at || Date.now()).getTime(),
+        old_data: data.old_data,
+        new_data: data.new_data
+      };
+    });
   } catch (e) {
     log.error('Error al recuperar logs remotos:', e);
     return [];

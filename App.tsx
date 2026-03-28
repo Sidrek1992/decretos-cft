@@ -660,11 +660,8 @@ const AppContent: React.FC = () => {
     const fullFromProfile = `${firstFromProfile} ${lastFromProfile}`.trim();
     if (fullFromProfile) return fullFromProfile;
 
-    const metadata = user?.user_metadata as Record<string, unknown> | undefined;
-    const firstFromMetadata = String(metadata?.first_name || '').trim();
-    const lastFromMetadata = String(metadata?.last_name || '').trim();
-    const fullFromMetadata = `${firstFromMetadata} ${lastFromMetadata}`.trim();
-    if (fullFromMetadata) return fullFromMetadata;
+    const displayName = user?.displayName;
+    if (displayName) return displayName;
 
     const email = user?.email?.toLowerCase();
     if (!email) return undefined;

@@ -24,7 +24,10 @@ import {
     Filter,
     ShieldCheck
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { db, auth } from '../lib/firebase';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { sendPasswordResetEmail, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
 import { PermitRecord, Employee } from '../types';
 import DataAuditorView from './DataAuditorView';
 import { UserRole, ROLE_LABELS, ROLE_COLORS } from '../types/roles';
@@ -104,16 +107,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
     const profilesRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const upsertRemoteProfile = async ({ email, role, firstName, lastName }: RemoteProfileInput): Promise<void> => {
-        const { error: upsertError } = await supabase
-            .from('profiles')
-            .upsert({
+        try {
+            await setDoc(doc(db, 'profiles', email.toLowerCase()), {
                 email: email.toLowerCase(),
                 role,
                 first_name: firstName,
                 last_name: lastName
-            }, { onConflict: 'email' });
-
-        if (upsertError) {
+            }, { merge: true });
+        } catch (upsertError) {
             throw upsertError;
         }
     };
@@ -125,9 +126,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
         const remoteProfilesByEmail: Record<string, { role: UserRole; firstName: string; lastName: string }> = {};
 
         try {
-            const { data } = await supabase
-                .from('profiles')
-                .select('email, role, first_name, last_name');
+            const snapshot = await getDocs(collection(db, 'profiles'));
+            const data = snapshot.docs.map(doc => doc.data());
 
             (data || []).forEach((row) => {
                 const email = String(row?.email || '').trim().toLowerCase();
@@ -243,21 +243,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
             const firstName = createFirstName.trim();
             const lastName = createLastName.trim();
 
-            const { error: signUpError } = await supabase.auth.signUp({
-                email,
-                password: createPassword,
-                options: {
-                    emailRedirectTo: window.location.origin,
-                    data: {
-                        role: createRole,
-                        first_name: firstName,
-                        last_name: lastName,
-                        full_name: `${firstName} ${lastName}`.trim()
-                    }
-                }
-            });
-
-            if (signUpError) {
+            // secondary auth instance to create user without logging out the current admin
+            const secondaryApp = initializeApp(auth.app.options, 'Secondary');
+            const secondaryAuth = getAuth(secondaryApp);
+            
+            try {
+                await createUserWithEmailAndPassword(secondaryAuth, email, createPassword);
+                await secondaryAuth.signOut();
+            } catch (signUpError) {
                 throw signUpError;
             }
 
@@ -430,13 +423,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, records, emplo
         setIsResettingByEmail((prev) => ({ ...prev, [normalized]: true }));
 
         try {
-            const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalized, {
-                redirectTo: `${window.location.origin}/reset-password`
+            await sendPasswordResetEmail(auth, normalized, {
+                url: `${window.location.origin}/reset-password`
             });
-
-            if (resetError) {
-                throw resetError;
-            }
 
             updateUserSecurity(normalized, { forcePasswordChange: false });
             appendAuditLog({

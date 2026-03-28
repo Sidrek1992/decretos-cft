@@ -1,4 +1,5 @@
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, addDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { logger } from '../utils/logger';
 
 const realtimeLogger = logger.create('RealtimeSync');
@@ -86,17 +87,16 @@ export const publishSyncEvent = async ({
   actorEmail,
   metadata,
 }: PublishSyncEventInput): Promise<void> => {
-  const { error } = await supabase
-    .from('sync_events')
-    .insert({
+  try {
+    await addDoc(collection(db, 'sync_events'), {
       scope,
       action,
       actor_email: normalizeEmail(actorEmail),
       origin_client_id: getRealtimeClientId(),
       metadata: metadata || {},
+      created_at: new Date().toISOString()
     });
-
-  if (error) {
+  } catch (error) {
     throw error;
   }
 };
@@ -107,22 +107,23 @@ export const subscribeToSyncEvents = ({
   ignoreOwnEvents = true,
   onEvent,
 }: SubscribeToSyncEventsOptions): (() => void) => {
-  const filter = scope ? `scope=eq.${scope}` : undefined;
-  const channelName = buildChannelName('gdp-sync-events', channelKey);
+  const eventsRef = collection(db, 'sync_events');
+  const q = scope ? query(eventsRef, where('scope', '==', scope)) : eventsRef;
 
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'sync_events',
-        ...(filter ? { filter } : {}),
-      },
-      (payload) => {
-        const event = payload.new as SyncEventRow | undefined;
-        if (!event) return;
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      // Only process new inserts
+      if (change.type === 'added') {
+        const data = change.doc.data();
+        const event: SyncEventRow = {
+          id: change.doc.id as any, // ID string in firebase
+          scope: data.scope,
+          action: data.action,
+          actor_email: data.actor_email,
+          origin_client_id: data.origin_client_id,
+          metadata: data.metadata,
+          created_at: data.created_at
+        };
 
         if (ignoreOwnEvents && event.origin_client_id === getRealtimeClientId()) {
           return;
@@ -130,16 +131,12 @@ export const subscribeToSyncEvents = ({
 
         onEvent(event);
       }
-    )
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        realtimeLogger.debug(`Canal conectado: ${channelName}`);
-      }
     });
 
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+    realtimeLogger.debug(`Sincronizado Firestore: gdp-sync-events-${channelKey} (${snapshot.docChanges().length} cambios)`);
+  });
+
+  return unsubscribe;
 };
 
 export const subscribeToProfileChanges = ({
@@ -147,37 +144,28 @@ export const subscribeToProfileChanges = ({
   email,
   onChange,
 }: SubscribeToProfileChangesOptions): (() => void) => {
-  const channelName = buildChannelName('gdp-profiles', channelKey);
-  const normalizedEmail = normalizeEmail(email);
+  const profilesRef = collection(db, 'profiles');
+  
+  const unsubscribe = onSnapshot(profilesRef, (snapshot) => {
+    const normalizedEmail = normalizeEmail(email);
 
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'profiles',
-      },
-      (payload) => {
-        const row = ((payload.new && Object.keys(payload.new).length > 0 ? payload.new : payload.old) || {}) as {
-          email?: string;
-        };
-
-        if (normalizedEmail && normalizeEmail(row.email) !== normalizedEmail) {
-          return;
+    let shouldTrigger = false;
+    snapshot.docChanges().forEach((change) => {
+      const row = change.doc.data() as { email?: string };
+      
+      if (normalizedEmail) {
+        if (normalizeEmail(row.email) === normalizedEmail) {
+          shouldTrigger = true;
         }
-
-        onChange();
-      }
-    )
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        realtimeLogger.debug(`Canal conectado: ${channelName}`);
+      } else {
+        shouldTrigger = true;
       }
     });
 
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+    if (shouldTrigger) {
+      onChange();
+    }
+  });
+
+  return unsubscribe;
 };
